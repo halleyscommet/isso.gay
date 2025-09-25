@@ -133,6 +133,7 @@ async function renderProfile(subdomain) {
             </div>
             <label>Bio (500 chars max)</label>
             <textarea id="bio" rows="3" placeholder="Write something">${escapeHTML(profile.bio || "")}</textarea>
+            <div class="small" style="margin-top:6px">You can add line breaks — they will be preserved.</div>
             <div style="margin-top:16px">
               <label style="display:block">Links (Title, URL, optional desc)</label>
               <div id="linksEditor"></div>
@@ -148,6 +149,19 @@ async function renderProfile(subdomain) {
               <textarea id="customHTML" rows="6" placeholder="<h2>Hello</h2>\n<p>This is my space.</p>">${escapeHTML(profile.customHTML || "")}</textarea>
               <p class="small" style="margin-top:4px">Allowed tags: h1–h6, p, a, ul, ol, li, strong, em, b, i, u, s, code, pre, blockquote, img, div, span, br, hr. Links must start with http/https. No scripts.</p>
               <p class="small" id="customHTMLStatus" style="margin-top:4px"></p>
+            </div>
+            <div style="margin-top:16px">
+              <h4 style="margin:8px 0">Open Graph (social preview)</h4>
+              <label>OG Title (optional, max 100 chars)</label>
+              <input id="ogTitle" type="text" placeholder="Custom title for social cards" value="${escapeHTML(profile.ogTitle || "")}" />
+              <label style="display:block;margin-top:8px">OG Description (optional, max 300 chars)</label>
+              <textarea id="ogDescription" rows="2" placeholder="Short description for social previews">${escapeHTML(profile.ogDescription || "")}</textarea>
+              <div style="margin-top:8px;text-align:center">
+                <label style="display:block;margin-bottom:4px">OG Image (optional, will be used for social previews)</label>
+                <img id="ogImagePreview" src="" style="max-width:120px;max-height:120px;display:none;margin:6px auto" alt="OG image preview">
+                <input type="file" id="ogImageInput" accept="image/*" />
+                <p class="small" style="margin-top:4px">Preferred size ~1200x630. Will be converted/used as-is. Max 2MB.</p>
+              </div>
             </div>
             <div style="margin-top:16px;text-align:right">
               <button type="submit" class="btn" id="saveBtn">Save</button>
@@ -176,6 +190,18 @@ async function renderProfile(subdomain) {
       setupLinksEditor(profile.links || []);
       hookAvatarUpload(existing, profile.avatarPath || "");
       hookFaviconUpload(existing, profile.faviconPath || "");
+      // OG image preview & handler
+      const ogPreview = document.getElementById("ogImagePreview");
+      const ogInput = document.getElementById("ogImageInput");
+      if (profile.ogImagePath && ogPreview && ogInput) {
+        try {
+          const url = await getDownloadURL(sref(storage, profile.ogImagePath));
+          ogPreview.src = url;
+          ogPreview.style.display = "";
+          ogInput.dataset.uploadedPath = profile.ogImagePath;
+        } catch {}
+      }
+      hookOgImageUpload();
       hookSave(existing);
       return;
     }
@@ -233,6 +259,53 @@ async function renderProfile(subdomain) {
     } catch {}
   }
 
+  // Inject Open Graph meta tags for profile (allow per-profile overrides)
+  // Remove any existing og/meta tags we added previously
+  [
+    'meta[property="og:title"]',
+    'meta[property="og:description"]',
+    'meta[property="og:image"]',
+    'meta[name="twitter:card"]',
+    'meta[name="twitter:title"]',
+    'meta[name="twitter:description"]',
+    'meta[name="twitter:image"]',
+  ].forEach((s) => {
+    document.querySelectorAll(s).forEach((n) => n.remove());
+  });
+
+  const ogTitle = p.ogTitle || `@${p.handle} — ${APEX}`;
+  const ogDesc =
+    p.ogDescription || (p.bio ? p.bio.split("\n")[0] : `Profile on ${APEX}`);
+  const ogImageURL = p.ogImagePath
+    ? await (async () => {
+        try {
+          return await getDownloadURL(sref(storage, p.ogImagePath));
+        } catch {
+          return "";
+        }
+      })()
+    : avatarURL || "";
+
+  function appendMeta(prop, content, isName) {
+    if (!content) return;
+    const m = document.createElement("meta");
+    if (isName) m.setAttribute("name", prop);
+    else m.setAttribute("property", prop);
+    m.content = content;
+    document.head.appendChild(m);
+  }
+  appendMeta("og:title", ogTitle);
+  appendMeta("og:description", ogDesc);
+  appendMeta("og:image", ogImageURL);
+  appendMeta(
+    "twitter:card",
+    ogImageURL ? "summary_large_image" : "summary",
+    true,
+  );
+  appendMeta("twitter:title", ogTitle, true);
+  appendMeta("twitter:description", ogDesc, true);
+  appendMeta("twitter:image", ogImageURL, true);
+
   // Inject custom favicon (remove existing ones first)
   if (faviconURL) {
     [
@@ -260,8 +333,8 @@ async function renderProfile(subdomain) {
     <div class="center">
       <div class="card" style="text-align:center">
         ${avatarURL ? `<img class="avatar" src="${avatarURL}" alt="">` : ""}
-        <h1>@${p.handle}</h1>
-        ${p.bio ? `<p>${escapeHTML(p.bio)}</p>` : ""}
+          <h1>@${p.handle}</h1>
+          ${p.bio ? `<p>${escapeHTML(p.bio).replace(/\n/g, "<br>")}</p>` : ""}
       </div>
       <div id="links"></div>
       ${p.customHTML ? `<div class="customHTML">${sanitizeHTML(p.customHTML)}</div>` : ""}
@@ -459,6 +532,44 @@ function hookFaviconUpload(subdomain, currentPath) {
   });
 }
 
+// Handler for OG image upload (simple upload, no crop)
+function hookOgImageUpload() {
+  const input = document.getElementById("ogImageInput");
+  const preview = document.getElementById("ogImagePreview");
+  if (!input) return;
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Not an image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert("OG image too large (max 2MB).");
+      return;
+    }
+    try {
+      const safeName = (file.name || `og_${Date.now()}.jpg`).replace(
+        /[^a-zA-Z0-9._-]/g,
+        "",
+      );
+      const path =
+        `ogimages/${auth.currentUser.uid}/${Date.now()}_${safeName}`.slice(
+          0,
+          200,
+        );
+      const ref = sref(storage, path);
+      await uploadBytes(ref, file, { contentType: file.type });
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = "";
+      input.dataset.uploadedPath = path;
+    } catch (e) {
+      console.error(e);
+      alert("OG image upload failed: " + (e.message || e));
+    }
+  });
+}
+
 // Resize/canvas normalize favicon to 32x32 PNG unless it's already an .ico (leave as-is)
 async function ensureFaviconSize(file) {
   if (file.type === "image/x-icon") {
@@ -526,9 +637,18 @@ function hookSave(subdomain) {
       .filter((l) => l.title && l.url);
     const faviconInput = document.getElementById("faviconInput");
     const faviconPath = faviconInput?.dataset.uploadedPath || undefined;
+    const ogInput = document.getElementById("ogImageInput");
+    const ogImagePath = ogInput?.dataset.uploadedPath || undefined;
+    const ogTitle = (document.getElementById("ogTitle")?.value || "").trim();
+    const ogDescription = (
+      document.getElementById("ogDescription")?.value || ""
+    ).trim();
     const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
     if (avatarPath) payload.avatarPath = avatarPath;
     if (faviconPath) payload.faviconPath = faviconPath;
+    if (ogImagePath) payload.ogImagePath = ogImagePath;
+    if (ogTitle) payload.ogTitle = ogTitle;
+    if (ogDescription) payload.ogDescription = ogDescription;
     form.querySelector("#saveBtn").disabled = true;
     saveStatus.textContent = "Saving…";
     try {

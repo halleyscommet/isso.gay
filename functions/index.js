@@ -141,9 +141,10 @@ export const updateProfile = onCall(
 
     const update = {};
 
-    // Bio
+    // Bio - preserve internal newlines but trim surrounding whitespace
     if (data.bio !== undefined) {
-      let bio = String(data.bio || "").trim();
+      // Keep line breaks but remove leading/trailing whitespace
+      let bio = String(data.bio || "").replace(/^\s+|\s+$/g, "");
       if (bio.length > 500) bio = bio.slice(0, 500);
       update.bio = bio;
     }
@@ -203,6 +204,27 @@ export const updateProfile = onCall(
       // Light sanitization: strip <script> tags just in case someone pastes HTML.
       css = css.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
       update.customCSS = css;
+    }
+
+    // Open Graph fields: allow per-profile overrides (title, description, image path)
+    if (data.ogTitle !== undefined) {
+      let t = String(data.ogTitle || "").trim();
+      if (t.length > 100) t = t.slice(0, 100);
+      update.ogTitle = t;
+    }
+    if (data.ogDescription !== undefined) {
+      let d = String(data.ogDescription || "").trim();
+      if (d.length > 300) d = d.slice(0, 300);
+      update.ogDescription = d;
+    }
+    if (data.ogImagePath !== undefined) {
+      let op = String(data.ogImagePath || "").trim();
+      // Only allow storage paths under ogimages/{uid}/
+      if (op && !op.startsWith(`ogimages/${uid}/`)) {
+        throw new HttpsError("invalid-argument", "invalid-ogImagePath");
+      }
+      if (op.length > 256) op = op.slice(0, 256);
+      update.ogImagePath = op;
     }
 
     // Custom HTML block: allow a subset of tags & attributes. Server-side defensive sanitize.
