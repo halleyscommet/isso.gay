@@ -89,7 +89,14 @@ async function renderProfile(subdomain) {
       } catch {}
       const profile = profileSnap?.exists()
         ? profileSnap.data()
-        : { bio: "", links: [], avatarPath: "", faviconPath: "", customCSS: "", customHTML: "" };
+        : {
+            bio: "",
+            links: [],
+            avatarPath: "",
+            faviconPath: "",
+            customCSS: "",
+            customHTML: "",
+          };
       const avatarURL = profile.avatarPath
         ? await getDownloadURL(sref(storage, profile.avatarPath)).catch(
             () => "",
@@ -228,10 +235,14 @@ async function renderProfile(subdomain) {
 
   // Inject custom favicon (remove existing ones first)
   if (faviconURL) {
-    [...document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')].forEach(l=>l.remove());
+    [
+      ...document.querySelectorAll(
+        'link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]',
+      ),
+    ].forEach((l) => l.remove());
     const link = document.createElement("link");
     link.rel = "icon";
-    link.type = faviconURL.endsWith('.ico') ? 'image/x-icon' : 'image/png';
+    link.type = faviconURL.endsWith(".ico") ? "image/x-icon" : "image/png";
     link.sizes = "32x32";
     link.href = faviconURL + `?v=${p.updatedAt?.toMillis?.() || Date.now()}`;
     document.head.appendChild(link);
@@ -427,8 +438,15 @@ function hookFaviconUpload(subdomain, currentPath) {
     }
     try {
       const blob = await ensureFaviconSize(file);
-      const safeName = (blob.name || file.name || "favicon.png").replace(/[^a-zA-Z0-9._-]/g, "");
-      const path = `favicons/${auth.currentUser.uid}/${Date.now()}_${safeName}`.slice(0, 200);
+      const safeName = (blob.name || file.name || "favicon.png").replace(
+        /[^a-zA-Z0-9._-]/g,
+        "",
+      );
+      const path =
+        `favicons/${auth.currentUser.uid}/${Date.now()}_${safeName}`.slice(
+          0,
+          200,
+        );
       const ref = sref(storage, path);
       await uploadBytes(ref, blob, { contentType: blob.type });
       preview.src = URL.createObjectURL(blob);
@@ -443,11 +461,11 @@ function hookFaviconUpload(subdomain, currentPath) {
 
 // Resize/canvas normalize favicon to 32x32 PNG unless it's already an .ico (leave as-is)
 async function ensureFaviconSize(file) {
-  if (file.type === 'image/x-icon') {
+  if (file.type === "image/x-icon") {
     return file; // trust size limit + browser handles .ico
   }
   // Convert PNG to 32x32 (cover) preserving aspect
-  const img = document.createElement('img');
+  const img = document.createElement("img");
   const dataUrl = await new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result);
@@ -456,19 +474,22 @@ async function ensureFaviconSize(file) {
   });
   img.src = dataUrl;
   await img.decode();
-  const canvas = document.createElement('canvas');
-  canvas.width = 32; canvas.height = 32;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0,0,32,32);
+  const canvas = document.createElement("canvas");
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, 32, 32);
   // cover logic
   const scale = Math.max(32 / img.width, 32 / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;
-  const dx = (32 - dw)/2;
-  const dy = (32 - dh)/2;
+  const dx = (32 - dw) / 2;
+  const dy = (32 - dh) / 2;
   ctx.drawImage(img, dx, dy, dw, dh);
-  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-  const out = new File([blob], `favicon_${Date.now()}.png`, { type: 'image/png' });
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  const out = new File([blob], `favicon_${Date.now()}.png`, {
+    type: "image/png",
+  });
   return out;
 }
 
@@ -503,11 +524,11 @@ function hookSave(subdomain) {
         desc: row.querySelector(".linkDesc").value.trim(),
       }))
       .filter((l) => l.title && l.url);
-  const faviconInput = document.getElementById("faviconInput");
-  const faviconPath = faviconInput?.dataset.uploadedPath || undefined;
-  const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
+    const faviconInput = document.getElementById("faviconInput");
+    const faviconPath = faviconInput?.dataset.uploadedPath || undefined;
+    const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
     if (avatarPath) payload.avatarPath = avatarPath;
-  if (faviconPath) payload.faviconPath = faviconPath;
+    if (faviconPath) payload.faviconPath = faviconPath;
     form.querySelector("#saveBtn").disabled = true;
     saveStatus.textContent = "Saving…";
     try {
