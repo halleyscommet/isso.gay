@@ -343,18 +343,28 @@ function hookAvatarUpload(subdomain, currentPath) {
       alert("Image too large (max 2MB).");
       return;
     }
-    const path =
-      `avatars/${auth.currentUser.uid}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "")}`.slice(
-        0,
-        200,
-      );
-    const ref = sref(storage, path);
     try {
-      await uploadBytes(ref, file, { contentType: file.type });
-      preview.src = URL.createObjectURL(file);
+      const cropped = await showImageCropper(file);
+      if (!cropped) return; // user cancelled
+      if (cropped.size > 2 * 1024 * 1024) {
+        alert(
+          "Cropped image too large (max 2MB). Try a smaller original or more zoom out.",
+        );
+        return;
+      }
+      const path =
+        `avatars/${auth.currentUser.uid}/${Date.now()}_${(cropped.name || "avatar.jpg").replace(/[^a-zA-Z0-9._-]/g, "")}`.slice(
+          0,
+          200,
+        );
+      const ref = sref(storage, path);
+      await uploadBytes(ref, cropped, { contentType: cropped.type });
+      preview.src = URL.createObjectURL(cropped);
       preview.style.display = "";
       input.dataset.uploadedPath = path;
     } catch (e) {
+      if (e && e.__cropCancelled) return; // silent cancel
+      console.error(e);
       alert("Upload failed: " + (e.message || e));
     }
   });
@@ -391,5 +401,212 @@ function hookSave(subdomain) {
     } finally {
       form.querySelector("#saveBtn").disabled = false;
     }
+  });
+}
+
+// -------------- Avatar cropping modal ---------------
+// Provides a lightweight square crop & position UI without external deps.
+function showImageCropper(originalFile) {
+  return new Promise((resolve, reject) => {
+    // Create modal lazily
+    const existing = document.getElementById("cropModalOverlay");
+    if (existing) existing.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "cropModalOverlay";
+    overlay.innerHTML = `
+      <div class="cropModal" role="dialog" aria-label="Crop avatar">
+        <h3 style="margin-top:0">Adjust your avatar</h3>
+        <div class="cropStageWrapper">
+          <canvas id="cropCanvas" width="300" height="300" aria-label="Image crop area"></canvas>
+          <div class="cropHint">Drag to position. Use slider or wheel to zoom.</div>
+        </div>
+        <label class="cropSliderLabel">Zoom <input id="cropZoom" type="range" min="0.5" max="3" step="0.01" value="1" /></label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+          <button type="button" class="btn" id="cropCancel">Cancel</button>
+          <button type="button" class="btn" id="cropConfirm">Crop & Upload</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const canvas = overlay.querySelector("#cropCanvas");
+    const ctx = canvas.getContext("2d");
+    const zoomInput = overlay.querySelector("#cropZoom");
+    const btnCancel = overlay.querySelector("#cropCancel");
+    const btnConfirm = overlay.querySelector("#cropConfirm");
+
+    let img = new Image();
+    let scale = 1; // current zoom
+    let baseScale = 1; // scale needed to fill the square initially
+    let offsetX = 0; // top-left draw offset
+    let offsetY = 0;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let dragOrigX = 0;
+    let dragOrigY = 0;
+
+    const cleanUp = () => overlay.remove();
+
+    function clampOffsets() {
+      const drawW = img.width * scale;
+      const drawH = img.height * scale;
+      // Ensure image fully covers canvas; if image smaller (shouldn't) center it.
+      if (drawW <= canvas.width) offsetX = (canvas.width - drawW) / 2;
+      else {
+        if (offsetX > 0) offsetX = 0;
+        if (offsetX + drawW < canvas.width) offsetX = canvas.width - drawW;
+      }
+      if (drawH <= canvas.height) offsetY = (canvas.height - drawH) / 2;
+      else {
+        if (offsetY > 0) offsetY = 0;
+        if (offsetY + drawH < canvas.height) offsetY = canvas.height - drawH;
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.fillStyle = "#222";
+      ctx.fillRect(0, 0, canvas.width, canvas.height); // background for transparency
+      ctx.drawImage(
+        img,
+        offsetX,
+        offsetY,
+        img.width * scale,
+        img.height * scale,
+      );
+      ctx.restore();
+    }
+
+    function setScale(s, focalX, focalY) {
+      const prevScale = scale;
+      scale = Math.min(
+        Math.max(s, parseFloat(zoomInput.min)),
+        parseFloat(zoomInput.max),
+      );
+      // Zoom relative to focal point: adjust offsets so focal stays in place
+      if (focalX !== undefined && focalY !== undefined) {
+        const ratio = scale / prevScale;
+        offsetX = focalX - (focalX - offsetX) * ratio;
+        offsetY = focalY - (focalY - offsetY) * ratio;
+      }
+      clampOffsets();
+      render();
+    }
+
+    canvas.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      dragStartX = e.clientX;
+      dragStartY = e.clientY;
+      dragOrigX = offsetX;
+      dragOrigY = offsetY;
+    });
+    window.addEventListener("mousemove", (e) => {
+      if (!isDragging) return;
+      offsetX = dragOrigX + (e.clientX - dragStartX);
+      offsetY = dragOrigY + (e.clientY - dragStartY);
+      clampOffsets();
+      render();
+    });
+    window.addEventListener("mouseup", () => {
+      isDragging = false;
+    });
+    canvas.addEventListener(
+      "wheel",
+      (e) => {
+        e.preventDefault();
+        const delta = -e.deltaY * 0.001; // trackpad friendly
+        const rect = canvas.getBoundingClientRect();
+        const focalX = e.clientX - rect.left;
+        const focalY = e.clientY - rect.top;
+        setScale(scale * (1 + delta), focalX, focalY);
+        zoomInput.value = scale.toFixed(2);
+      },
+      { passive: false },
+    );
+
+    zoomInput.addEventListener("input", () => {
+      setScale(parseFloat(zoomInput.value));
+    });
+
+    btnCancel.addEventListener("click", () => {
+      cleanUp();
+      const err = new Error("cancelled");
+      err.__cropCancelled = true;
+      reject(err);
+    });
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) {
+        btnCancel.click();
+      }
+    });
+    window.addEventListener(
+      "keydown",
+      function esc(e) {
+        if (e.key === "Escape") {
+          btnCancel.click();
+        }
+      },
+      { once: true },
+    );
+
+    btnConfirm.addEventListener("click", () => {
+      // Export 512x512 JPEG (or PNG if original had transparency & type is png)
+      const outSize = 512; // consistent resolution
+      const out = document.createElement("canvas");
+      out.width = outSize;
+      out.height = outSize;
+      const octx = out.getContext("2d");
+      octx.fillStyle = "#222";
+      octx.fillRect(0, 0, outSize, outSize);
+      const ratio = outSize / canvas.width;
+      octx.drawImage(
+        img,
+        offsetX * ratio,
+        offsetY * ratio,
+        img.width * scale * ratio,
+        img.height * scale * ratio,
+      );
+      const wantsPNG = /png$/i.test(originalFile.type);
+      out.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error("Failed to create image blob"));
+            cleanUp();
+            return;
+          }
+          const file = new File(
+            [blob],
+            `avatar_${Date.now()}.${wantsPNG ? "png" : "jpg"}`,
+            { type: blob.type },
+          );
+          cleanUp();
+          resolve(file);
+        },
+        wantsPNG ? "image/png" : "image/jpeg",
+        wantsPNG ? undefined : 0.9,
+      );
+    });
+
+    // Load image
+    const reader = new FileReader();
+    reader.onload = () => {
+      img.onload = () => {
+        // Compute base scale to fill square
+        const scaleX = canvas.width / img.width;
+        const scaleY = canvas.height / img.height;
+        baseScale = Math.max(scaleX, scaleY);
+        scale = baseScale;
+        zoomInput.value = scale.toFixed(2);
+        // Center
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        offsetX = (canvas.width - drawW) / 2;
+        offsetY = (canvas.height - drawH) / 2;
+        render();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(originalFile);
   });
 }

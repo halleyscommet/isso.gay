@@ -61,6 +61,7 @@ Profiles readable individually by anyone (no collection list). User docs only re
 Static assets (`app.js`, `styles.css`) are long‑cached via the Cloudflare Worker. To avoid manual cache purges we use a small script that injects a content hash as a `?v=` query param.
 
 Workflow:
+
 1. Edit `public/app.js` or `public/styles.css`.
 2. Run `npm run version-assets` (generates hashes, rewrites `public/index.html`).
 3. Deploy hosting: `firebase deploy --only hosting`.
