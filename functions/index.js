@@ -117,7 +117,7 @@ export const deleteMySubdomain = onCall(
 
 // Update profile fields (bio, links, avatarPath, customCSS). Owner only.
 // Input shape (all optional):
-// { bio: string, links: [{title, url, desc?}], avatarPath: string, customCSS: string }
+// { bio: string, links: [{title, url, desc?}], avatarPath: string, faviconPath: string, customCSS: string, customHTML: string }
 // Validation limits to keep things small & safe.
 export const updateProfile = onCall(
   { region: "us-central1", cors: CORS },
@@ -183,6 +183,17 @@ export const updateProfile = onCall(
       }
       if (ap.length > 256) ap = ap.slice(0, 256);
       update.avatarPath = ap;
+    }
+
+    // Favicon path - must be in favicons/{uid}/ and should be tiny (enforced client side);
+    // kept separate from avatar so user can have distinct square icon.
+    if (data.faviconPath !== undefined) {
+      let fp = String(data.faviconPath || "").trim();
+      if (fp && !fp.startsWith(`favicons/${uid}/`)) {
+        throw new HttpsError("invalid-argument", "invalid-faviconPath");
+      }
+      if (fp.length > 256) fp = fp.slice(0, 256);
+      update.faviconPath = fp;
     }
 
     // Custom CSS (scoped & size-limited). Stored raw; injected client side inside <style>

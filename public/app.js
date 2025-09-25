@@ -89,9 +89,14 @@ async function renderProfile(subdomain) {
       } catch {}
       const profile = profileSnap?.exists()
         ? profileSnap.data()
-        : { bio: "", links: [], avatarPath: "", customCSS: "", customHTML: "" };
+        : { bio: "", links: [], avatarPath: "", faviconPath: "", customCSS: "", customHTML: "" };
       const avatarURL = profile.avatarPath
         ? await getDownloadURL(sref(storage, profile.avatarPath)).catch(
+            () => "",
+          )
+        : "";
+      const faviconURL = profile.faviconPath
+        ? await getDownloadURL(sref(storage, profile.faviconPath)).catch(
             () => "",
           )
         : "";
@@ -110,6 +115,14 @@ async function renderProfile(subdomain) {
               <div style="margin-top:8px">
                 <input type="file" id="avatarInput" accept="image/*" />
               </div>
+            </div>
+            <div style="margin-bottom:12px;text-align:center">
+              <label style="display:block;margin-bottom:4px">Custom Favicon (32x32 recommended, PNG/ICO, &lt;50KB)</label>
+              <img id="faviconPreview" src="${faviconURL}" style="max-width:32px;max-height:32px;${faviconURL ? "" : "display:none"}" alt="">
+              <div style="margin-top:4px">
+                <input type="file" id="faviconInput" accept="image/png,image/x-icon" />
+              </div>
+              <p class="small" style="margin-top:4px">Will show in browser tab on your subdomain.</p>
             </div>
             <label>Bio (500 chars max)</label>
             <textarea id="bio" rows="3" placeholder="Write something">${escapeHTML(profile.bio || "")}</textarea>
@@ -155,6 +168,7 @@ async function renderProfile(subdomain) {
         });
       setupLinksEditor(profile.links || []);
       hookAvatarUpload(existing, profile.avatarPath || "");
+      hookFaviconUpload(existing, profile.faviconPath || "");
       hookSave(existing);
       return;
     }
@@ -200,10 +214,27 @@ async function renderProfile(subdomain) {
   document.title = `@${p.handle} — ${APEX}`;
 
   let avatarURL = "";
+  let faviconURL = "";
   if (p.avatarPath) {
     try {
       avatarURL = await getDownloadURL(sref(storage, p.avatarPath));
     } catch {}
+  }
+  if (p.faviconPath) {
+    try {
+      faviconURL = await getDownloadURL(sref(storage, p.faviconPath));
+    } catch {}
+  }
+
+  // Inject custom favicon (remove existing ones first)
+  if (faviconURL) {
+    [...document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]')].forEach(l=>l.remove());
+    const link = document.createElement("link");
+    link.rel = "icon";
+    link.type = faviconURL.endsWith('.ico') ? 'image/x-icon' : 'image/png';
+    link.sizes = "32x32";
+    link.href = faviconURL + `?v=${p.updatedAt?.toMillis?.() || Date.now()}`;
+    document.head.appendChild(link);
   }
 
   // Inject custom CSS if present
@@ -378,6 +409,69 @@ function hookAvatarUpload(subdomain, currentPath) {
   });
 }
 
+function hookFaviconUpload(subdomain, currentPath) {
+  const input = document.getElementById("faviconInput");
+  const preview = document.getElementById("faviconPreview");
+  if (!input) return;
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const typeOk = ["image/png", "image/x-icon"].includes(file.type);
+    if (!typeOk) {
+      alert("Favicon must be PNG or ICO");
+      return;
+    }
+    if (file.size > 50 * 1024) {
+      alert("Favicon too large (max 50KB)");
+      return;
+    }
+    try {
+      const blob = await ensureFaviconSize(file);
+      const safeName = (blob.name || file.name || "favicon.png").replace(/[^a-zA-Z0-9._-]/g, "");
+      const path = `favicons/${auth.currentUser.uid}/${Date.now()}_${safeName}`.slice(0, 200);
+      const ref = sref(storage, path);
+      await uploadBytes(ref, blob, { contentType: blob.type });
+      preview.src = URL.createObjectURL(blob);
+      preview.style.display = "";
+      input.dataset.uploadedPath = path;
+    } catch (e) {
+      console.error(e);
+      alert("Favicon upload failed: " + (e.message || e));
+    }
+  });
+}
+
+// Resize/canvas normalize favicon to 32x32 PNG unless it's already an .ico (leave as-is)
+async function ensureFaviconSize(file) {
+  if (file.type === 'image/x-icon') {
+    return file; // trust size limit + browser handles .ico
+  }
+  // Convert PNG to 32x32 (cover) preserving aspect
+  const img = document.createElement('img');
+  const dataUrl = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(file);
+  });
+  img.src = dataUrl;
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = 32; canvas.height = 32;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,32,32);
+  // cover logic
+  const scale = Math.max(32 / img.width, 32 / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const dx = (32 - dw)/2;
+  const dy = (32 - dh)/2;
+  ctx.drawImage(img, dx, dy, dw, dh);
+  const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+  const out = new File([blob], `favicon_${Date.now()}.png`, { type: 'image/png' });
+  return out;
+}
+
 function hookSave(subdomain) {
   const form = document.getElementById("editForm");
   if (!form) return;
@@ -409,8 +503,11 @@ function hookSave(subdomain) {
         desc: row.querySelector(".linkDesc").value.trim(),
       }))
       .filter((l) => l.title && l.url);
-    const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
+  const faviconInput = document.getElementById("faviconInput");
+  const faviconPath = faviconInput?.dataset.uploadedPath || undefined;
+  const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
     if (avatarPath) payload.avatarPath = avatarPath;
+  if (faviconPath) payload.faviconPath = faviconPath;
     form.querySelector("#saveBtn").disabled = true;
     saveStatus.textContent = "Saving…";
     try {

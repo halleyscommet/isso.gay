@@ -9,6 +9,7 @@ A minimal profile subdomain project. Users can claim exactly one subdomain (e.g.
 - Profile editing UI (avatar upload, bio, links, custom CSS, optional custom HTML)
 - Optional custom CSS injected only on the user's page (5KB cap, scripts stripped)
 - Optional custom HTML block (5KB cap) with strict allow‑list sanitation (headings, paragraphs, inline formatting, lists, links, code, blockquote, img, simple structural tags). No script/style/iframe/event handlers or `javascript:` / `data:` URLs.
+- Optional custom favicon per subdomain (user‑uploaded 32x32 PNG/ICO <50KB)
 - Public profile documents stored in Firestore under `profiles/{subdomain}`
 - Internal user ownership doc at `users/{uid}` (not publicly readable)
 - Deletion endpoint to release a subdomain (optional UI button)
@@ -24,6 +25,7 @@ profiles/{subdomain} {
   bio: <string>,            // up to 500 chars
   links: [ { title, url, desc? } ], // up to 20 links
   avatarPath: <string>,     // path in Storage (avatars/<uid>/...)
+  faviconPath: <string>,    // path in Storage (favicons/<uid>/...)
   customCSS: <string>,      // up to ~5KB, sanitized (no <script>)
   customHTML: <string>,     // up to ~5KB, sanitized allow‑list (see below)
   createdAt, updatedAt
@@ -39,7 +41,7 @@ users/{uid} {
 - `claimSubdomain({ subdomain })` – claims new subdomain if user has none.
 - `getMySubdomain()` – returns `{ subdomain }` or null.
 - `deleteMySubdomain()` – deletes both the user doc and profile (irreversible).
-- `updateProfile({ bio?, links?, avatarPath?, customCSS?, customHTML? })` – partial update of owned profile (validation + size limits).
+- `updateProfile({ bio?, links?, avatarPath?, faviconPath?, customCSS?, customHTML? })` – partial update of owned profile (validation + size limits).
 
 ## Firestore Security
 
@@ -90,6 +92,24 @@ Workflow:
 Source template: `public/index.template.html` (never gains `?v=` params). The script re-renders `index.html` from this template each run. If you add new static assets that need versioning, add them to the `assets` array inside `scripts/version-assets.mjs`.
 
 Optional: Add a Firebase predeploy hook in `firebase.json` to run `npm run version-assets` automatically before hosting deploys.
+
+## Custom Favicon
+
+Each profile can set a custom favicon which appears only on their subdomain pages.
+
+Implementation notes:
+
+- Stored at `favicons/{uid}/<timestamp>_<name>.png|ico` in Firebase Storage
+- Upload UI accepts PNG or ICO. PNGs are normalized client‑side to 32×32 (cover) and re‑encoded as PNG.
+- Size limit enforced client side: 50KB
+- Path stored in Firestore as `faviconPath`
+- When rendering a profile page the client injects a `<link rel="icon">` tag dynamically with a cache‑busting query param derived from `updatedAt` (or current time if absent)
+- Apex domain uses a static `default-favicon.svg`
+
+Security:
+
+- Storage rules restrict writes to `favicons/{uid}/` for the authenticated owner (mirrors avatar path logic)
+- Cloud Functions validate that any provided `faviconPath` begins with `favicons/{uid}/`
 
 ## TODO / Ideas
 
