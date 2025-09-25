@@ -1,4 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import { sanitizeHTML } from "./sanitize.js";
 import {
   getAuth,
   signInWithPopup,
@@ -88,7 +89,7 @@ async function renderProfile(subdomain) {
       } catch {}
       const profile = profileSnap?.exists()
         ? profileSnap.data()
-        : { bio: "", links: [], avatarPath: "", customCSS: "" };
+        : { bio: "", links: [], avatarPath: "", customCSS: "", customHTML: "" };
       const avatarURL = profile.avatarPath
         ? await getDownloadURL(sref(storage, profile.avatarPath)).catch(
             () => "",
@@ -121,6 +122,12 @@ async function renderProfile(subdomain) {
               <label>Custom CSS (optional, max 5KB)</label>
               <textarea id="customCSS" rows="6" placeholder="/* e.g. */\nbody{background:#222;color:#eee}\n.avatar{border:3px solid hotpink}">${escapeHTML(profile.customCSS || "")}</textarea>
               <p class="small" style="margin-top:4px">Applied only on your subdomain page. No &lt;script&gt; tags.</p>
+            </div>
+            <div style="margin-top:16px">
+              <label>Custom HTML block (optional, safe tags only)</label>
+              <textarea id="customHTML" rows="6" placeholder="<h2>Hello</h2>\n<p>This is my space.</p>">${escapeHTML(profile.customHTML || "")}</textarea>
+              <p class="small" style="margin-top:4px">Allowed tags: h1–h6, p, a, ul, ol, li, strong, em, b, i, u, s, code, pre, blockquote, img, div, span, br, hr. Links must start with http/https. No scripts.</p>
+              <p class="small" id="customHTMLStatus" style="margin-top:4px"></p>
             </div>
             <div style="margin-top:16px;text-align:right">
               <button type="submit" class="btn" id="saveBtn">Save</button>
@@ -215,6 +222,7 @@ async function renderProfile(subdomain) {
         ${p.bio ? `<p>${escapeHTML(p.bio)}</p>` : ""}
       </div>
       <div id="links"></div>
+      ${p.customHTML ? `<div class="customHTML">${sanitizeHTML(p.customHTML)}</div>` : ""}
     </div>
   `;
 
@@ -379,6 +387,19 @@ function hookSave(subdomain) {
     e.preventDefault();
     const bio = document.getElementById("bio").value;
     const customCSS = document.getElementById("customCSS").value;
+    const rawCustomHTML = document.getElementById("customHTML")?.value || "";
+    const safeCustomHTML = sanitizeHTML(rawCustomHTML, { maxLength: 5000 });
+    // Show a quick diff warning if content was altered
+    if (
+      rawCustomHTML &&
+      rawCustomHTML.trim() &&
+      rawCustomHTML.trim() !== safeCustomHTML.trim()
+    ) {
+      const st = document.getElementById("customHTMLStatus");
+      if (st)
+        st.textContent =
+          "Some disallowed tags/attributes were removed for safety.";
+    }
     const avatarInput = document.getElementById("avatarInput");
     const avatarPath = avatarInput?.dataset.uploadedPath || undefined;
     const links = [...document.querySelectorAll("#linksEditor .linkRow")]
@@ -388,7 +409,7 @@ function hookSave(subdomain) {
         desc: row.querySelector(".linkDesc").value.trim(),
       }))
       .filter((l) => l.title && l.url);
-    const payload = { bio, links, customCSS };
+    const payload = { bio, links, customCSS, customHTML: safeCustomHTML };
     if (avatarPath) payload.avatarPath = avatarPath;
     form.querySelector("#saveBtn").disabled = true;
     saveStatus.textContent = "Saving…";

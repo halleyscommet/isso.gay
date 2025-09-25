@@ -194,6 +194,26 @@ export const updateProfile = onCall(
       update.customCSS = css;
     }
 
+    // Custom HTML block: allow a subset of tags & attributes. Server-side defensive sanitize.
+    if (data.customHTML !== undefined) {
+      let html = String(data.customHTML || "");
+      if (html.length > 5000) html = html.slice(0, 5000);
+      // Strip script/style/iframe and on* attributes + javascript: or data: URLs
+      // Remove blocked tags entirely
+      html = html.replace(/<\/(?:script|style)[^>]*>/gi, ""); // closing tags simplified
+      html = html.replace(
+        /<(script|style|iframe|object|embed|audio|video)[^>]*>[\s\S]*?<\/\1>/gi,
+        "",
+      );
+      // Remove event handler attributes
+      html = html
+        .replace(/ on[a-z]+="[^"]*"/gi, "")
+        .replace(/ on[a-z]+='[^']*'/gi, "");
+      // Neutralize javascript: and data: in href/src
+      html = html.replace(/(href|src)=("|')(javascript:|data:)/gi, "$1=$2");
+      update.customHTML = html;
+    }
+
     if (Object.keys(update).length === 0) return { ok: true, noop: true };
     update.updatedAt = FieldValue.serverTimestamp();
     await profileRef.update(update);

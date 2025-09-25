@@ -1,13 +1,14 @@
 # isso.gay
 
-A minimal profile subdomain project. Users can claim exactly one subdomain (e.g. `yourname.isso.gay`) and customize their page (avatar, bio, links, optional custom CSS).
+A minimal profile subdomain project. Users can claim exactly one subdomain (e.g. `yourname.isso.gay`) and customize their page (avatar, bio, links, optional custom CSS, optional safe custom HTML block).
 
 ## Features
 
 - Firebase Auth (Google) required to claim a subdomain
 - Exactly one subdomain per account (enforced server-side in a transaction)
-- Profile editing UI (avatar upload, bio, links, custom CSS)
+- Profile editing UI (avatar upload, bio, links, custom CSS, optional custom HTML)
 - Optional custom CSS injected only on the user's page (5KB cap, scripts stripped)
+- Optional custom HTML block (5KB cap) with strict allow‑list sanitation (headings, paragraphs, inline formatting, lists, links, code, blockquote, img, simple structural tags). No script/style/iframe/event handlers or `javascript:` / `data:` URLs.
 - Public profile documents stored in Firestore under `profiles/{subdomain}`
 - Internal user ownership doc at `users/{uid}` (not publicly readable)
 - Deletion endpoint to release a subdomain (optional UI button)
@@ -24,6 +25,7 @@ profiles/{subdomain} {
   links: [ { title, url, desc? } ], // up to 20 links
   avatarPath: <string>,     // path in Storage (avatars/<uid>/...)
   customCSS: <string>,      // up to ~5KB, sanitized (no <script>)
+  customHTML: <string>,     // up to ~5KB, sanitized allow‑list (see below)
   createdAt, updatedAt
 }
 users/{uid} {
@@ -37,11 +39,29 @@ users/{uid} {
 - `claimSubdomain({ subdomain })` – claims new subdomain if user has none.
 - `getMySubdomain()` – returns `{ subdomain }` or null.
 - `deleteMySubdomain()` – deletes both the user doc and profile (irreversible).
-- `updateProfile({ bio?, links?, avatarPath?, customCSS? })` – partial update of owned profile (validation + size limits).
+- `updateProfile({ bio?, links?, avatarPath?, customCSS?, customHTML? })` – partial update of owned profile (validation + size limits).
 
 ## Firestore Security
 
 Profiles readable individually by anyone (no collection list). User docs only readable by the owner. All writes funnel through Cloud Functions.
+
+### Custom HTML Sanitization
+
+Client & server both sanitize `customHTML` defensively. Allowed tags:
+
+```
+h1 h2 h3 h4 h5 h6 p a ul ol li strong em b i u s code pre blockquote img div span br hr
+```
+
+Allowed attributes:
+
+```
+Global: class id title aria-label role
+<a>: href target rel (href must be http/https; target=_blank forces rel=noopener)
+<img>: src alt width height (src must be http/https)
+```
+
+Removed automatically: any other tags, inline event handlers (on\*), iframe/object/embed/audio/video/style/script tags, `javascript:` / `data:` URLs, unknown attributes. If user input is changed by sanitation a note is shown in the editor.
 
 ## Local Development
 
@@ -76,5 +96,8 @@ Optional: Add a Firebase predeploy hook in `firebase.json` to run `npm run versi
 - Rate limiting & abuse detection (to add)
 - Reserved / premium names workflow
 - Moderation / reporting tools
+- Allow per‑user tweaking of allowed tags (admin moderated)
+- Image proxying / resizing for external `img` sources
+- Pre-render static HTML for profiles and cache aggressively at edge
 
 MIT License.
