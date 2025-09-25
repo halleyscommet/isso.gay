@@ -1,0 +1,395 @@
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+import {
+  getStorage,
+  ref as sref,
+  getDownloadURL,
+  uploadBytes,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-storage.js";
+import {
+  getFunctions,
+  httpsCallable,
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-functions.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAK_lpEcyuHso4oTZM1U-EfHKypP6YvA08",
+  authDomain: "isso-gay.firebaseapp.com",
+  projectId: "isso-gay",
+  storageBucket: "isso-gay.firebasestorage.app",
+  messagingSenderId: "800933783311",
+  appId: "1:800933783311:web:0e546191c66879ff18c07a",
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+const functions = getFunctions(app, "us-central1");
+
+const APEX = "isso.gay"; // change if needed
+
+function getSubdomain(host) {
+  host = host.split(":")[0].toLowerCase();
+  if (host === APEX || host === `www.${APEX}`) return null;
+  const parts = host.split(".");
+  const apexParts = APEX.split(".");
+  if (parts.length <= apexParts.length) return null;
+  return parts.slice(0, parts.length - apexParts.length).join(".");
+}
+const sub = getSubdomain(location.hostname);
+
+async function renderProfile(subdomain) {
+  const el = document.getElementById("app");
+  if (!subdomain) {
+    // Root (apex) landing page logic
+    const user = auth.currentUser;
+    if (!user) {
+      el.innerHTML = `
+        <div class="center">
+          <h1>isso.gay</h1>
+          <p><strong>Grab your username as a subdomain.</strong><br/>One per account. Totally free.</p>
+          <div class="card" style="text-align:center">
+            <button class="btn" id="g">Sign in with Google</button>
+            <p class="small" style="margin-top:8px">Sign in to reserve your subdomain.</p>
+          </div>
+          <p class="small">Your profile will live at https://&lt;name&gt;.${APEX}</p>
+        </div>`;
+      hookAuthUI();
+      return;
+    }
+
+    // User signed in: determine if they already have a subdomain
+    el.innerHTML = `<div class="center"><p>Loading your subdomain…</p></div>`;
+    let existing;
+    try {
+      const getMy = httpsCallable(functions, "getMySubdomain");
+      const r = await getMy();
+      existing = r.data?.subdomain || null;
+    } catch (e) {
+      console.error("Failed to load user subdomain", e);
+    }
+
+    if (existing) {
+      // Load existing profile to populate editing form
+      let profileSnap;
+      try {
+        profileSnap = await getDoc(doc(db, "profiles", existing));
+      } catch {}
+      const profile = profileSnap?.exists()
+        ? profileSnap.data()
+        : { bio: "", links: [], avatarPath: "", customCSS: "" };
+      const avatarURL = profile.avatarPath
+        ? await getDownloadURL(sref(storage, profile.avatarPath)).catch(
+            () => "",
+          )
+        : "";
+      el.innerHTML = `
+        <div class="center">
+          <h1>Manage your profile</h1>
+          <div class="card" style="text-align:center">
+            <p style="margin:0 0 12px"><strong>${existing}.${APEX}</strong></p>
+            <a class="btn" href="https://${existing}.${APEX}" target="_blank">View</a>
+            <button class="btn" id="deleteSub" style="margin-left:6px">Delete</button>
+          </div>
+          <form id="editForm" class="card" style="display:block">
+            <h3 style="margin-top:0">Profile</h3>
+            <div class="avatarRow" style="margin-bottom:12px;text-align:center">
+              <img id="avatarPreview" class="avatar" src="${avatarURL}" style="${avatarURL ? "" : "display:none"}" alt="">
+              <div style="margin-top:8px">
+                <input type="file" id="avatarInput" accept="image/*" />
+              </div>
+            </div>
+            <label>Bio (500 chars max)</label>
+            <textarea id="bio" rows="3" placeholder="Write something">${escapeHTML(profile.bio || "")}</textarea>
+            <div style="margin-top:16px">
+              <label style="display:block">Links (Title, URL, optional desc)</label>
+              <div id="linksEditor"></div>
+              <button type="button" class="btn smallBtn" id="addLinkBtn" style="margin-top:8px">Add link</button>
+            </div>
+            <div style="margin-top:16px">
+              <label>Custom CSS (optional, max 5KB)</label>
+              <textarea id="customCSS" rows="6" placeholder="/* e.g. */\nbody{background:#222;color:#eee}\n.avatar{border:3px solid hotpink}">${escapeHTML(profile.customCSS || "")}</textarea>
+              <p class="small" style="margin-top:4px">Applied only on your subdomain page. No &lt;script&gt; tags.</p>
+            </div>
+            <div style="margin-top:16px;text-align:right">
+              <button type="submit" class="btn" id="saveBtn">Save</button>
+            </div>
+            <p id="saveStatus" class="small" style="min-height:1em"></p>
+          </form>
+          <button class="btn" id="signOutBtn">Sign out</button>
+        </div>`;
+      document
+        .getElementById("signOutBtn")
+        .addEventListener("click", () => signOut(auth));
+      document
+        .getElementById("deleteSub")
+        .addEventListener("click", async () => {
+          if (!confirm("Really delete your subdomain? This cannot be undone."))
+            return;
+          try {
+            const del = httpsCallable(functions, "deleteMySubdomain");
+            await del();
+            alert("Deleted. You can now claim a new one.");
+            renderProfile(null);
+          } catch (e) {
+            alert("Failed to delete: " + (e.message || e));
+          }
+        });
+      setupLinksEditor(profile.links || []);
+      hookAvatarUpload(existing, profile.avatarPath || "");
+      hookSave(existing);
+      return;
+    }
+
+    // No existing subdomain: show claim form
+    el.innerHTML = `
+      <div class="center">
+        <h1>Claim your subdomain</h1>
+        <div class="card">
+          <label style="display:block;margin-bottom:6px">Choose a name</label>
+          <input id="sub" type="text" placeholder="your-name" />
+          <div style="margin-top:12px">
+            <button class="btn" id="claim">Claim</button>
+            <button class="btn" id="signOutBtn" style="margin-left:6px">Sign out</button>
+          </div>
+          <p class="small" style="margin-top:8px">Allowed: letters, numbers, dashes. 1–63 chars. One per account.</p>
+        </div>
+      </div>`;
+    document
+      .getElementById("signOutBtn")
+      .addEventListener("click", () => signOut(auth));
+    hookClaim();
+    return;
+  }
+
+  let snap;
+  try {
+    snap = await getDoc(doc(db, "profiles", subdomain));
+  } catch (e) {
+    console.error("Failed to load profile", e);
+    if (e?.code === "permission-denied") {
+      el.innerHTML = `<h2>Profile currently unavailable (permissions)</h2>`;
+      return;
+    }
+    el.innerHTML = `<h2>Error loading profile</h2>`;
+    return;
+  }
+  if (!snap.exists()) {
+    el.innerHTML = `<h2>${subdomain}.${APEX} not found</h2>`;
+    return;
+  }
+  const p = snap.data();
+  document.title = `@${p.handle} — ${APEX}`;
+
+  let avatarURL = "";
+  if (p.avatarPath) {
+    try {
+      avatarURL = await getDownloadURL(sref(storage, p.avatarPath));
+    } catch {}
+  }
+
+  // Inject custom CSS if present
+  if (p.customCSS) {
+    const styleTag = document.createElement("style");
+    styleTag.id = "customProfileCSS";
+    styleTag.textContent = p.customCSS;
+    document.head.appendChild(styleTag);
+  }
+
+  el.innerHTML = `
+    <div class="center">
+      <div class="card" style="text-align:center">
+        ${avatarURL ? `<img class="avatar" src="${avatarURL}" alt="">` : ""}
+        <h1>@${p.handle}</h1>
+        ${p.bio ? `<p>${escapeHTML(p.bio)}</p>` : ""}
+      </div>
+      <div id="links"></div>
+    </div>
+  `;
+
+  const linksEl = document.getElementById("links");
+  (p.links || []).forEach((l) => {
+    const a = document.createElement("a");
+    a.href = l.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.className = "card";
+    a.innerHTML = `<strong>${l.title}</strong>${l.desc ? `<div>${l.desc}</div>` : ""}`;
+    linksEl.appendChild(a);
+  });
+}
+
+function hookAuthUI() {
+  const handleAuthError = (e) => {
+    console.error("Auth error:", e);
+    const code = e?.code || "";
+    if (code === "auth/unauthorized-domain") {
+      alert(
+        "Sign-in is not allowed from this domain yet. Please add this domain to Firebase Authentication > Settings > Authorized domains.",
+      );
+      return;
+    }
+    if (code === "auth/popup-blocked") {
+      alert(
+        "Your browser blocked the sign-in popup. Please allow popups for this site and try again.",
+      );
+      return;
+    }
+    if (code === "auth/popup-closed-by-user") {
+      // Silently ignore; user closed the popup.
+      return;
+    }
+    alert("Failed to sign in: " + (e?.message || e));
+  };
+
+  document.getElementById("g")?.addEventListener("click", async () => {
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (e) {
+      handleAuthError(e);
+    }
+  });
+}
+
+function hookClaim() {
+  const btn = document.getElementById("claim");
+  const input = document.getElementById("sub");
+  if (!btn || !input) return;
+  const claim = httpsCallable(functions, "claimSubdomain");
+  btn.addEventListener("click", async () => {
+    const name = (input.value || "").trim().toLowerCase();
+    if (!name) {
+      alert("Enter a name");
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Claiming…";
+    try {
+      const res = await claim({ subdomain: name });
+      const finalName = res.data?.subdomain || name;
+      location.href = `https://${finalName}.${APEX}`;
+    } catch (e) {
+      const code = e?.message || "";
+      if (code.includes("already-has-subdomain"))
+        alert("You already have a subdomain.");
+      else if (code.includes("taken")) alert("That name is taken.");
+      else if (code.includes("reserved")) alert("That name is reserved.");
+      else if (code.includes("invalid-subdomain"))
+        alert("Invalid name. Letters, numbers, dashes.");
+      else alert("Failed: " + (e.message || e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Claim";
+    }
+  });
+}
+
+onAuthStateChanged(auth, () => renderProfile(sub));
+
+// Helpers
+function escapeHTML(str) {
+  return (str || "").replace(
+    /[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+  );
+}
+
+function setupLinksEditor(existing) {
+  const container = document.getElementById("linksEditor");
+  if (!container) return;
+  function addRow(link = { title: "", url: "", desc: "" }) {
+    const div = document.createElement("div");
+    div.className = "linkRow";
+    div.innerHTML = `
+      <input type="text" class="linkTitle" placeholder="Title" value="${escapeHTML(link.title)}" />
+      <input type="text" class="linkURL" placeholder="https://..." value="${escapeHTML(link.url)}" />
+      <input type="text" class="linkDesc" placeholder="Description (optional)" value="${escapeHTML(link.desc || "")}" />
+      <button type="button" class="btn removeBtn">×</button>
+    `;
+    div.querySelector(".removeBtn").addEventListener("click", () => {
+      div.remove();
+    });
+    container.appendChild(div);
+  }
+  existing.forEach((l) => addRow(l));
+  document
+    .getElementById("addLinkBtn")
+    ?.addEventListener("click", () => addRow());
+}
+
+function hookAvatarUpload(subdomain, currentPath) {
+  const input = document.getElementById("avatarInput");
+  const preview = document.getElementById("avatarPreview");
+  if (!input) return;
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Not an image");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Image too large (max 2MB).");
+      return;
+    }
+    const path =
+      `avatars/${auth.currentUser.uid}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, "")}`.slice(
+        0,
+        200,
+      );
+    const ref = sref(storage, path);
+    try {
+      await uploadBytes(ref, file, { contentType: file.type });
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = "";
+      input.dataset.uploadedPath = path;
+    } catch (e) {
+      alert("Upload failed: " + (e.message || e));
+    }
+  });
+}
+
+function hookSave(subdomain) {
+  const form = document.getElementById("editForm");
+  if (!form) return;
+  const saveStatus = document.getElementById("saveStatus");
+  const saveFn = httpsCallable(functions, "updateProfile");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const bio = document.getElementById("bio").value;
+    const customCSS = document.getElementById("customCSS").value;
+    const avatarInput = document.getElementById("avatarInput");
+    const avatarPath = avatarInput?.dataset.uploadedPath || undefined;
+    const links = [...document.querySelectorAll("#linksEditor .linkRow")]
+      .map((row) => ({
+        title: row.querySelector(".linkTitle").value.trim(),
+        url: row.querySelector(".linkURL").value.trim(),
+        desc: row.querySelector(".linkDesc").value.trim(),
+      }))
+      .filter((l) => l.title && l.url);
+    const payload = { bio, links, customCSS };
+    if (avatarPath) payload.avatarPath = avatarPath;
+    form.querySelector("#saveBtn").disabled = true;
+    saveStatus.textContent = "Saving…";
+    try {
+      await saveFn(payload);
+      saveStatus.textContent = "Saved!";
+      setTimeout(() => (saveStatus.textContent = ""), 2000);
+    } catch (e) {
+      saveStatus.textContent = "Error: " + (e.message || e);
+    } finally {
+      form.querySelector("#saveBtn").disabled = false;
+    }
+  });
+}

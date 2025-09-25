@@ -1,0 +1,25 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Public profile documents: allow individual document reads, but disallow listing the entire collection
+    match /profiles/{profileId} {
+      allow get: if true;         // anyone can view a profile by exact ID
+      allow list: if false;       // prevent enumeration of all profiles
+      allow create, update, delete: if false; // all writes go through privileged Cloud Functions
+    }
+
+    // User documents: only the authenticated owner can read their own. Never writable from client.
+    match /users/{userId} {
+      allow get: if request.auth != null && request.auth.uid == userId;
+      allow list: if false; // no listing of all users
+      allow create, update, delete: if false; // only via Cloud Functions
+    }
+
+    // Default deny for everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

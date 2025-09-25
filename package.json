@@ -1,0 +1,12 @@
+{
+  "name": "isso.gay",
+  "version": "0.1.0",
+  "scripts": {
+    "format": "npx prettier --write .",
+    "format:check": "npx prettier --check .",
+    "format:smart": "npm run format:check || npm run format",
+    "version-assets": "node scripts/version-assets.mjs",
+    "deploy:all": "npm run version-assets && firebase deploy --only hosting,functions,firestore,storage && npx wrangler deploy --config cloudflare/wrangler.toml",
+    "deploy:smart": "node scripts/deploy-smart.mjs"
+  }
+}

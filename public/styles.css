@@ -1,0 +1,80 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  padding: 24px;
+  background: #fafafa;
+  color: #111;
+}
+.card {
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  margin: 12px 0;
+  background: #fff;
+}
+.btn {
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+  background: #fff;
+}
+.avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 9999px;
+  object-fit: cover;
+}
+.center {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.small {
+  opacity: 0.7;
+  font-size: 0.9rem;
+}
+input[type="text"] {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+}
+a textarea,
+textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid #ccc;
+  font: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.linkRow {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  align-items: center;
+  margin-top: 8px;
+}
+.linkRow input {
+  width: 100%;
+}
+.linkRow .removeBtn {
+  padding: 6px 10px;
+}
+.smallBtn {
+  font-size: 0.8rem;
+  padding: 6px 10px;
+}
+.linkRow button {
+  border: 1px solid #ddd;
+}
+.avatarRow input[type="file"] {
+  font-size: 0.8rem;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}

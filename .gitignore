@@ -1,0 +1,119 @@
+###############################
+# Base / OS / Editor cruft    #
+###############################
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+###############################
+# Logs & diagnostics          #
+###############################
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+firebase-debug.log*
+firebase-debug.*.log*
+firestore-debug.log*
+storage-debug.log*
+
+###############################
+# Dependency directories      #
+###############################
+node_modules/
+.pnp.cjs
+.pnp.loader.mjs
+
+###############################
+# Build / Output artifacts    #
+###############################
+dist/
+build/
+build/Release
+coverage
+.nyc_output
+lib-cov
+*.tsbuildinfo
+
+###############################
+# Package managers            #
+###############################
+*.tgz
+.npm
+.yarn-integrity
+.pnpm-debug.log*
+
+###############################
+# Caches                      #
+###############################
+.eslintcache
+.cache/
+*.cache
+
+###############################
+# Runtime data / pids         #
+###############################
+pids
+*.pid
+*.seed
+*.pid.lock
+
+###############################
+# Environment / secrets       #
+###############################
+# Primary environment files (add variants as needed)
+.env
+.env.*.local
+!.env.example
+
+###############################
+# Firebase                    #
+###############################
+.firebase/
+.dataconnect
+
+# If you want contributors to supply their own project, uncomment to ignore.
+# .firebaserc
+
+###############################
+# Cloudflare Workers          #
+###############################
+# Wrangler creates a .wrangler/ directory for local state.
+.wrangler/
+
+# If wrangler.toml contains only non-secret config you usually COMMIT it.
+# If you intentionally keep it private, leave the next line uncommented.
+# cloudflare/wrangler.toml
+
+###############################
+# Tooling                     #
+###############################
+.grunt
+bower_components
+.lock-wscript
+
+###############################
+# Node REPL history           #
+###############################
+.node_repl_history
+
+###############################
+# Misc                        #
+###############################
+*.orig
+*.rej
+*.bak
+*.tmp
+tmp/
+temp/
+
+###############################
+# Project-specific (adjust)   #
+###############################
+# Add any hashed / versioned asset output folders here if scripts generate them.
+# e.g. public/assets-versioned/
