@@ -1,9 +1,13 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 initializeApp();
 const db = getFirestore();
+const storage = getStorage();
+
+const APEX = "isso.gay"; // keep in sync with frontend
 
 const RESERVED = new Set([
   "www",
@@ -253,3 +257,85 @@ export const updateProfile = onCall(
     return { ok: true };
   },
 );
+
+// Public endpoint to get OG meta for a given subdomain (used by Cloudflare Worker)
+// GET /og-meta?subdomain=<name> OR /og-meta?host=<hostname>
+export const ogMeta = onRequest({ region: "us-central1", cors: true }, async (req, res) => {
+  try {
+    const host = String(req.query.host || req.headers.host || "").toLowerCase();
+    let sub = String(req.query.subdomain || "").toLowerCase();
+    if (!sub && host) {
+      // derive subdomain from host
+      const h = host.split(":")[0];
+      if (h !== APEX && h !== `www.${APEX}` && h.endsWith(`.${APEX}`)) {
+        sub = h.slice(0, -1 * (`.${APEX}`.length));
+      }
+    }
+
+    // Default site-wide meta
+    const defaults = {
+      title: "isso.gay",
+      description:
+        "Claim a personal subdomain on isso.gay and build a simple profile page.",
+      image: "https://isso.gay/default-favicon.svg",
+      favicon: "https://isso.gay/default-favicon.svg",
+    };
+
+    if (!sub) {
+      res.set("cache-control", "no-store");
+      res.json(defaults);
+      return;
+    }
+
+    const snap = await db.collection("profiles").doc(sub).get();
+    if (!snap.exists) {
+      res.set("cache-control", "no-store");
+      res.json(defaults);
+      return;
+    }
+    const p = snap.data() || {};
+
+    async function fileUrlFromPath(path) {
+      if (!path) return "";
+      try {
+        const bucket = storage.bucket();
+        const file = bucket.file(path);
+        const [md] = await file.getMetadata();
+        const token = md?.metadata?.firebaseStorageDownloadTokens;
+        if (token) {
+          const firstToken = String(token).split(",")[0];
+          const enc = encodeURIComponent(path);
+          return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${enc}?alt=media&token=${firstToken}`;
+        }
+        // Fallback signed URL (1 day)
+        const [url] = await file.getSignedUrl({ action: "read", expires: Date.now() + 24 * 60 * 60 * 1000 });
+        return url;
+      } catch (e) {
+        console.error("ogMeta: failed to build URL for", path, e);
+        return "";
+      }
+    }
+
+    const avatarURL = await fileUrlFromPath(p.avatarPath);
+    const faviconURL = await fileUrlFromPath(p.faviconPath);
+    const ogImageURL = await fileUrlFromPath(p.ogImagePath) || avatarURL || "";
+
+    const title = p.ogTitle || `@${p.handle || sub} — ${APEX}`;
+    const description =
+      p.ogDescription || (p.bio ? String(p.bio).split("\n")[0] : `Profile on ${APEX}`);
+
+    res.set("cache-control", "no-store");
+    res.json({
+      title,
+      description,
+      image: ogImageURL || defaults.image,
+      favicon: faviconURL || defaults.favicon,
+      handle: p.handle || sub,
+      subdomain: sub,
+      url: `https://${sub}.${APEX}`,
+    });
+  } catch (e) {
+    console.error("ogMeta error", e);
+    res.status(500).json({ error: "internal" });
+  }
+});

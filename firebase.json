@@ -10,7 +10,10 @@
         ]
       }
     ],
-    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "rewrites": [
+      { "source": "/og-meta", "function": "ogMeta" },
+      { "source": "**", "destination": "/index.html" }
+    ],
     "predeploy": ["npm run version-assets"]
   },
   "functions": { "source": "functions" },
