@@ -111,6 +111,77 @@ Security:
 - Storage rules restrict writes to `favicons/{uid}/` for the authenticated owner (mirrors avatar path logic)
 - Cloud Functions validate that any provided `faviconPath` begins with `favicons/{uid}/`
 
+## Badge System
+
+This project includes a secure badge system that allows site administrators to assign visual badges to users. Badges appear next to profile handles and cannot be faked with HTML/CSS injection.
+
+### Available Badges
+
+- **Owner** - Red gradient badge for site owners
+- **Contributor** - Teal gradient badge for contributors  
+- **Supporter** - Purple gradient badge for supporters
+
+### Security Features
+
+- Badges are stored server-side in a protected Firestore collection
+- Only designated admin users can assign/modify badges
+- Client-side badge display fetches data from server - cannot be manipulated
+- Badge assignment requires Cloud Function calls with admin authentication
+- Firestore security rules prevent direct client access to badge documents
+
+### Admin Setup
+
+1. **Add your Firebase UID to the admin list:**
+   ```javascript
+   // In functions/index.js
+   const SITE_ADMIN_UIDS = new Set([
+     "YOUR_FIREBASE_UID_HERE"
+   ]);
+   ```
+
+2. **Deploy the updated functions:**
+   ```bash
+   firebase deploy --only functions,firestore
+   ```
+
+3. **Access the admin panel:**
+   - Sign in with your admin account
+   - Go to your profile management page
+   - The admin panel will automatically appear for admin users
+
+### Badge Management
+
+**Assign badges via admin panel:**
+1. Enter the subdomain (username) 
+2. Check the desired badges
+3. Click "Assign Badges"
+
+**Load current badges:**
+1. Enter the subdomain
+2. Click "Load Current" to see existing badges
+
+**Remove badges:**
+1. Load current badges for a user
+2. Uncheck all badges  
+3. Click "Assign Badges" (assigns empty badge set)
+
+### API Functions
+
+- `getBadges({ subdomain })` - Public function to get badges for any subdomain
+- `assignBadges({ subdomain, badges })` - Admin-only function to assign badges
+- `getAllBadges()` - Admin-only function to list all badge assignments
+
+### Data Structure
+
+```
+badges/{subdomain} {
+  subdomain: string,
+  badges: string[],        // Array of badge types: ["owner", "contributor"]
+  assignedBy: string,      // UID of admin who assigned badges
+  updatedAt: Timestamp
+}
+```
+
 ## TODO / Ideas
 
 - Rate limiting & abuse detection (to add)
@@ -119,5 +190,7 @@ Security:
 - Allow per‑user tweaking of allowed tags (admin moderated)
 - Image proxying / resizing for external `img` sources
 - Pre-render static HTML for profiles and cache aggressively at edge
+- Badge expiration/rotation system
+- Custom badge colors/designs
 
 [MIT License](LICENSE).

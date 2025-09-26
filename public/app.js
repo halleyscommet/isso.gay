@@ -168,6 +168,23 @@ async function renderProfile(subdomain) {
             </div>
             <p id="saveStatus" class="small" style="min-height:1em"></p>
           </form>
+          <div id="adminPanel" style="display:none">
+            <div class="card">
+              <h3>Admin Panel</h3>
+              <div style="margin-bottom:12px">
+                <label>Assign badges to subdomain:</label>
+                <input id="badgeSubdomain" type="text" placeholder="username" style="margin-bottom:8px" />
+                <div style="margin-bottom:8px">
+                  <label><input type="checkbox" value="owner" /> Owner</label>
+                  <label style="margin-left:12px"><input type="checkbox" value="contributor" /> Contributor</label>
+                  <label style="margin-left:12px"><input type="checkbox" value="supporter" /> Supporter</label>
+                </div>
+                <button class="btn" id="assignBadgesBtn">Assign Badges</button>
+                <button class="btn" id="loadBadgesBtn" style="margin-left:8px">Load Current</button>
+              </div>
+              <p id="badgeStatus" class="small" style="min-height:1em"></p>
+            </div>
+          </div>
           <button class="btn" id="signOutBtn">Sign out</button>
         </div>`;
       document
@@ -203,6 +220,7 @@ async function renderProfile(subdomain) {
       }
       hookOgImageUpload();
       hookSave(existing);
+      hookAdminPanel();
       return;
     }
 
@@ -329,11 +347,29 @@ async function renderProfile(subdomain) {
     document.head.appendChild(styleTag);
   }
 
+  // Fetch badges for this subdomain
+  let badges = [];
+  try {
+    const getBadgesFn = httpsCallable(functions, "getBadges");
+    const badgeResult = await getBadgesFn({ subdomain });
+    badges = badgeResult.data?.badges || [];
+  } catch (e) {
+    console.warn("Failed to load badges for", subdomain, e);
+    // Continue without badges - not critical
+  }
+
+  // Create badge HTML
+  const badgeHTML = badges.length > 0 
+    ? `<div class="badge-container">${badges.map(badge => 
+        `<span class="badge ${escapeHTML(badge)}">${escapeHTML(badge)}</span>`
+      ).join('')}</div>`
+    : '';
+
   el.innerHTML = `
     <div class="center">
       <div class="card" style="text-align:center">
         ${avatarURL ? `<img class="avatar" src="${avatarURL}" alt="">` : ""}
-          <h1>@${p.handle}</h1>
+          <h1>@${p.handle}${badgeHTML}</h1>
           ${p.bio ? `<p>${escapeHTML(p.bio).replace(/\n/g, "<br>")}</p>` : ""}
       </div>
       <div id="links"></div>
@@ -867,5 +903,89 @@ function showImageCropper(originalFile) {
       img.src = reader.result;
     };
     reader.readAsDataURL(originalFile);
+  });
+}
+
+// Admin panel for badge management
+function hookAdminPanel() {
+  const adminPanel = document.getElementById("adminPanel");
+  const badgeStatus = document.getElementById("badgeStatus");
+  const subdomainInput = document.getElementById("badgeSubdomain");
+  const assignBtn = document.getElementById("assignBadgesBtn");
+  const loadBtn = document.getElementById("loadBadgesBtn");
+  
+  if (!adminPanel || !auth.currentUser) return;
+  
+  // Check if user has admin access by trying to call getAllBadges
+  const checkAdminAccess = httpsCallable(functions, "getAllBadges");
+  checkAdminAccess().then(() => {
+    // User is admin, show panel
+    adminPanel.style.display = "block";
+  }).catch(() => {
+    // User is not admin, hide panel
+    adminPanel.style.display = "none";
+  });
+  
+  const getCheckboxes = () => {
+    return [...document.querySelectorAll('#adminPanel input[type="checkbox"]')];
+  };
+  
+  const getSelectedBadges = () => {
+    return getCheckboxes()
+      .filter(cb => cb.checked)
+      .map(cb => cb.value);
+  };
+  
+  const setSelectedBadges = (badges) => {
+    getCheckboxes().forEach(cb => {
+      cb.checked = badges.includes(cb.value);
+    });
+  };
+  
+  assignBtn?.addEventListener("click", async () => {
+    const subdomain = (subdomainInput?.value || "").trim().toLowerCase();
+    if (!subdomain) {
+      badgeStatus.textContent = "Enter a subdomain";
+      return;
+    }
+    
+    const badges = getSelectedBadges();
+    assignBtn.disabled = true;
+    badgeStatus.textContent = "Assigning badges...";
+    
+    try {
+      const assignBadgesFn = httpsCallable(functions, "assignBadges");
+      const result = await assignBadgesFn({ subdomain, badges });
+      badgeStatus.textContent = `Success! Assigned: ${result.data.badges.join(", ") || "none"}`;
+    } catch (e) {
+      console.error("Badge assignment failed:", e);
+      badgeStatus.textContent = "Error: " + (e.message || e);
+    } finally {
+      assignBtn.disabled = false;
+    }
+  });
+  
+  loadBtn?.addEventListener("click", async () => {
+    const subdomain = (subdomainInput?.value || "").trim().toLowerCase();
+    if (!subdomain) {
+      badgeStatus.textContent = "Enter a subdomain";
+      return;
+    }
+    
+    loadBtn.disabled = true;
+    badgeStatus.textContent = "Loading current badges...";
+    
+    try {
+      const getBadgesFn = httpsCallable(functions, "getBadges");
+      const result = await getBadgesFn({ subdomain });
+      const badges = result.data?.badges || [];
+      setSelectedBadges(badges);
+      badgeStatus.textContent = `Loaded: ${badges.join(", ") || "no badges"}`;
+    } catch (e) {
+      console.error("Badge loading failed:", e);
+      badgeStatus.textContent = "Error loading: " + (e.message || e);
+    } finally {
+      loadBtn.disabled = false;
+    }
   });
 }

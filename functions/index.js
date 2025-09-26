@@ -19,7 +19,15 @@ const RESERVED = new Set([
   "status",
 ]);
 
+// Badge system configuration
+const VALID_BADGES = new Set(["owner", "contributor", "supporter"]);
+const SITE_ADMIN_UIDS = new Set([
+  "RCkItgH6oHTAsivQUpU0WDLDOp92"
+]);
+
 // Shared CORS config for callable functions
+// Note: For callable functions, CORS is handled automatically by Firebase SDK
+// But we include this for any HTTP functions that might need it
 const CORS = [
   "https://isso.gay",
   "https://www.isso.gay",
@@ -30,6 +38,9 @@ const CORS = [
   "http://localhost:5500",
 ];
 
+// For callable functions, we need to allow all subdomains
+const CORS_CALLABLE = true; // This allows all origins for callable functions
+
 /**
  * Claim a subdomain. New logic enforces ONLY ONE subdomain per user.
  * Transaction touches two docs:
@@ -38,7 +49,7 @@ const CORS = [
  * If either exists (profile taken OR user already has one) it aborts.
  */
 export const claimSubdomain = onCall(
-  { region: "us-central1", cors: CORS },
+  { region: "us-central1", cors: true },
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "login first");
@@ -82,7 +93,7 @@ export const claimSubdomain = onCall(
 
 // Get the caller's current subdomain (if any)
 export const getMySubdomain = onCall(
-  { region: "us-central1", cors: CORS },
+  { region: "us-central1", cors: true },
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "login first");
@@ -94,7 +105,7 @@ export const getMySubdomain = onCall(
 
 // Delete (release) the caller's subdomain. This is optional & irreversible.
 export const deleteMySubdomain = onCall(
-  { region: "us-central1", cors: CORS },
+  { region: "us-central1", cors: true },
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "login first");
@@ -124,7 +135,7 @@ export const deleteMySubdomain = onCall(
 // { bio: string, links: [{title, url, desc?}], avatarPath: string, faviconPath: string, customCSS: string, customHTML: string }
 // Validation limits to keep things small & safe.
 export const updateProfile = onCall(
-  { region: "us-central1", cors: CORS },
+  { region: "us-central1", cors: true },
   async (req) => {
     const uid = req.auth?.uid;
     if (!uid) throw new HttpsError("unauthenticated", "login first");
@@ -339,3 +350,128 @@ export const ogMeta = onRequest({ region: "us-central1", cors: true }, async (re
     res.status(500).json({ error: "internal" });
   }
 });
+
+// Get badges for a specific subdomain (public endpoint)
+export const getBadges = onCall(
+  { region: "us-central1", cors: true },
+  async (req) => {
+    const subdomain = String(req.data?.subdomain || "").toLowerCase();
+    if (!subdomain) {
+      throw new HttpsError("invalid-argument", "subdomain-required");
+    }
+
+    try {
+      const badgeRef = db.collection("badges").doc(subdomain);
+      const badgeSnap = await badgeRef.get();
+      
+      if (!badgeSnap.exists) {
+        return { badges: [] };
+      }
+      
+      const data = badgeSnap.data();
+      const badges = (data.badges || []).filter(badge => VALID_BADGES.has(badge));
+      
+      return { badges };
+    } catch (e) {
+      console.error("getBadges error", e);
+      throw new HttpsError("internal", "failed-to-get-badges");
+    }
+  }
+);
+
+// Assign badges to a subdomain (admin only)
+export const assignBadges = onCall(
+  { region: "us-central1", cors: true },
+  async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "login first");
+    
+    // Check if user is a site admin
+    if (!SITE_ADMIN_UIDS.has(uid)) {
+      throw new HttpsError("permission-denied", "admin-only");
+    }
+
+    const subdomain = String(req.data?.subdomain || "").toLowerCase();
+    const badges = req.data?.badges || [];
+    
+    if (!subdomain) {
+      throw new HttpsError("invalid-argument", "subdomain-required");
+    }
+    
+    if (!Array.isArray(badges)) {
+      throw new HttpsError("invalid-argument", "badges-must-be-array");
+    }
+    
+    // Validate badges
+    const validBadges = badges.filter(badge => 
+      typeof badge === "string" && VALID_BADGES.has(badge.toLowerCase())
+    ).map(badge => badge.toLowerCase());
+    
+    // Remove duplicates
+    const uniqueBadges = [...new Set(validBadges)];
+    
+    try {
+      // Verify the subdomain exists
+      const profileRef = db.collection("profiles").doc(subdomain);
+      const profileSnap = await profileRef.get();
+      
+      if (!profileSnap.exists) {
+        throw new HttpsError("not-found", "subdomain-not-found");
+      }
+      
+      const badgeRef = db.collection("badges").doc(subdomain);
+      const now = FieldValue.serverTimestamp();
+      
+      if (uniqueBadges.length === 0) {
+        // Remove badges document if no badges
+        await badgeRef.delete();
+      } else {
+        // Set badges
+        await badgeRef.set({
+          subdomain,
+          badges: uniqueBadges,
+          assignedBy: uid,
+          updatedAt: now
+        });
+      }
+      
+      return { ok: true, badges: uniqueBadges };
+    } catch (e) {
+      console.error("assignBadges error", e);
+      if (e instanceof HttpsError) throw e;
+      throw new HttpsError("internal", "failed-to-assign-badges");
+    }
+  }
+);
+
+// Get all badges for all subdomains (admin only, for management)
+export const getAllBadges = onCall(
+  { region: "us-central1", cors: true },
+  async (req) => {
+    const uid = req.auth?.uid;
+    if (!uid) throw new HttpsError("unauthenticated", "login first");
+    
+    if (!SITE_ADMIN_UIDS.has(uid)) {
+      throw new HttpsError("permission-denied", "admin-only");
+    }
+    
+    try {
+      const badgesSnap = await db.collection("badges").get();
+      const allBadges = {};
+      
+      badgesSnap.forEach(doc => {
+        const data = doc.data();
+        allBadges[doc.id] = {
+          badges: data.badges || [],
+          assignedBy: data.assignedBy || null,
+          updatedAt: data.updatedAt || null
+        };
+      });
+      
+      return { badges: allBadges };
+    } catch (e) {
+      console.error("getAllBadges error", e);
+      throw new HttpsError("internal", "failed-to-get-all-badges");
+    }
+  }
+);

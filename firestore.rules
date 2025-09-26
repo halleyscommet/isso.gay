@@ -17,6 +17,13 @@ service cloud.firestore {
       allow create, update, delete: if false; // only via Cloud Functions
     }
 
+    // Badge documents: read-only access for individual badge docs, no writes from client
+    match /badges/{badgeId} {
+      allow get: if true;         // anyone can read individual badge docs
+      allow list: if false;       // prevent enumeration of all badges
+      allow create, update, delete: if false; // only via privileged Cloud Functions
+    }
+
     // Default deny for everything else
     match /{document=**} {
       allow read, write: if false;
