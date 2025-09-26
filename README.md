@@ -120,4 +120,4 @@ Security:
 - Image proxying / resizing for external `img` sources
 - Pre-render static HTML for profiles and cache aggressively at edge
 
-MIT License.
+[MIT License](LICENSE).
