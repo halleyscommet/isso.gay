@@ -139,16 +139,63 @@ async function renderProfile(subdomain) {
               <div id="linksEditor"></div>
               <button type="button" class="btn smallBtn" id="addLinkBtn" style="margin-top:8px">Add link</button>
             </div>
-            <div style="margin-top:16px">
-              <label>Custom CSS (optional, max 5KB)</label>
-              <textarea id="customCSS" rows="6" placeholder="/* e.g. */\nbody{background:#222;color:#eee}\n.avatar{border:3px solid hotpink}">${escapeHTML(profile.customCSS || "")}</textarea>
-              <p class="small" style="margin-top:4px">Applied only on your subdomain page. No &lt;script&gt; tags.</p>
-            </div>
-            <div style="margin-top:16px">
-              <label>Custom HTML block (optional, safe tags only)</label>
-              <textarea id="customHTML" rows="6" placeholder="<h2>Hello</h2>\n<p>This is my space.</p>">${escapeHTML(profile.customHTML || "")}</textarea>
-              <p class="small" style="margin-top:4px">Allowed tags: h1–h6, p, a, ul, ol, li, strong, em, b, i, u, s, code, pre, blockquote, img, div, span, br, hr. Links must start with http/https. No scripts.</p>
-              <p class="small" id="customHTMLStatus" style="margin-top:4px"></p>
+            <div class="customEditorLayout" style="margin-top:16px">
+              <div class="customEditorMain">
+                <div class="customEditorSection">
+                  <label>Custom CSS (optional, max 5KB)</label>
+                  <textarea id="customCSS" rows="6" placeholder="/* e.g. */\nbody{background:#222;color:#eee}\n.avatar{border:3px solid hotpink}">${escapeHTML(profile.customCSS || "")}</textarea>
+                  <p class="small" style="margin-top:4px">Applied only on your subdomain page. No &lt;script&gt; tags.</p>
+                </div>
+                <div class="customEditorSection">
+                  <label>Custom HTML block (optional, safe tags only)</label>
+                  <textarea id="customHTML" rows="6" placeholder="<h2>Hello</h2>\n<p>This is my space.</p>">${escapeHTML(profile.customHTML || "")}</textarea>
+                  <p class="small" style="margin-top:4px">Allowed tags: h1–h6, p, a, ul, ol, li, strong, em, b, i, u, s, code, pre, blockquote, img, div, span, br, hr. Links must start with http/https. No scripts.</p>
+                  <p class="small" id="customHTMLStatus" style="margin-top:4px"></p>
+                </div>
+              </div>
+              <aside class="savedConfigPanel" id="savedConfigPanel" aria-label="Saved HTML and CSS configs">
+                <h4 style="margin:0 0 8px">Saved configs</h4>
+                <p class="small" style="margin:0 0 12px">Keep up to three HTML/CSS combinations locally. They stay on this device.</p>
+                <p class="small savedConfigPanelStatus" role="status" aria-live="polite" style="min-height:1.2em;margin:0 0 12px"></p>
+                <div class="savedConfigList">
+                  <div class="savedConfigSlot" data-slot="0">
+                    <div class="savedConfigSlotHeader">
+                      <span class="slotTitle">Slot 1</span>
+                      <input type="text" class="savedConfigName" placeholder="Label (optional)" />
+                    </div>
+                    <div class="savedConfigSlotButtons">
+                      <button type="button" class="btn smallBtn saveConfigBtn">Save</button>
+                      <button type="button" class="btn smallBtn loadConfigBtn">Load</button>
+                      <button type="button" class="btn smallBtn clearConfigBtn">Clear</button>
+                    </div>
+                    <p class="small savedConfigMeta">Empty</p>
+                  </div>
+                  <div class="savedConfigSlot" data-slot="1">
+                    <div class="savedConfigSlotHeader">
+                      <span class="slotTitle">Slot 2</span>
+                      <input type="text" class="savedConfigName" placeholder="Label (optional)" />
+                    </div>
+                    <div class="savedConfigSlotButtons">
+                      <button type="button" class="btn smallBtn saveConfigBtn">Save</button>
+                      <button type="button" class="btn smallBtn loadConfigBtn">Load</button>
+                      <button type="button" class="btn smallBtn clearConfigBtn">Clear</button>
+                    </div>
+                    <p class="small savedConfigMeta">Empty</p>
+                  </div>
+                  <div class="savedConfigSlot" data-slot="2">
+                    <div class="savedConfigSlotHeader">
+                      <span class="slotTitle">Slot 3</span>
+                      <input type="text" class="savedConfigName" placeholder="Label (optional)" />
+                    </div>
+                    <div class="savedConfigSlotButtons">
+                      <button type="button" class="btn smallBtn saveConfigBtn">Save</button>
+                      <button type="button" class="btn smallBtn loadConfigBtn">Load</button>
+                      <button type="button" class="btn smallBtn clearConfigBtn">Clear</button>
+                    </div>
+                    <p class="small savedConfigMeta">Empty</p>
+                  </div>
+                </div>
+              </aside>
             </div>
             <div style="margin-top:16px">
               <h4 style="margin:8px 0">Open Graph (social preview)</h4>
@@ -219,6 +266,7 @@ async function renderProfile(subdomain) {
         } catch {}
       }
       hookOgImageUpload();
+      hookSavedConfigs();
       hookSave(existing);
       hookAdminPanel();
       return;
@@ -696,6 +744,157 @@ function hookSave(subdomain) {
     } finally {
       form.querySelector("#saveBtn").disabled = false;
     }
+  });
+}
+
+function hookSavedConfigs() {
+  const panel = document.getElementById("savedConfigPanel");
+  if (!panel) return;
+  const cssField = document.getElementById("customCSS");
+  const htmlField = document.getElementById("customHTML");
+  const statusEl = panel.querySelector(".savedConfigPanelStatus");
+  if (!cssField || !htmlField) return;
+
+  const storageKey = (() => {
+    const uid = auth.currentUser?.uid;
+    return uid ? `issoSavedConfigs_${uid}` : null;
+  })();
+
+  let statusTimeout;
+  const setStatus = (msg, options = {}) => {
+    if (!statusEl) return;
+    statusEl.textContent = msg || "";
+    if (statusTimeout) clearTimeout(statusTimeout);
+    if (msg && !options.sticky) {
+      statusTimeout = setTimeout(() => {
+        statusEl.textContent = "";
+      }, 4000);
+    }
+  };
+
+  if (!storageKey) {
+    panel.querySelectorAll("button").forEach((btn) => {
+      btn.disabled = true;
+    });
+    setStatus("Sign in to use saved configs.", { sticky: true });
+    return;
+  }
+
+  const readConfigs = () => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return [null, null, null];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [null, null, null];
+      const normalized = [0, 1, 2].map((i) => {
+        const entry = parsed[i];
+        if (!entry || typeof entry !== "object") return null;
+        const { html, css, name, updatedAt } = entry;
+        if (typeof html !== "string" || typeof css !== "string") return null;
+        return {
+          html,
+          css,
+          name: typeof name === "string" ? name : "",
+          updatedAt: typeof updatedAt === "number" ? updatedAt : Date.now(),
+        };
+      });
+      return normalized;
+    } catch (e) {
+      console.warn("Failed to read saved configs", e);
+      setStatus("Saved configs unavailable (storage error).", { sticky: true });
+      return [null, null, null];
+    }
+  };
+
+  let configs = readConfigs();
+
+  const persistConfigs = () => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(configs));
+      return true;
+    } catch (e) {
+      console.warn("Failed to persist saved config", e);
+      setStatus("Couldn't store configs (storage full or blocked).", { sticky: true });
+      configs = readConfigs();
+      return false;
+    }
+  };
+
+  const slots = Array.from(panel.querySelectorAll(".savedConfigSlot"));
+  slots.forEach((slotEl, index) => {
+    const nameInput = slotEl.querySelector(".savedConfigName");
+    const metaEl = slotEl.querySelector(".savedConfigMeta");
+    const saveBtn = slotEl.querySelector(".saveConfigBtn");
+    const loadBtn = slotEl.querySelector(".loadConfigBtn");
+    const clearBtn = slotEl.querySelector(".clearConfigBtn");
+
+    const updateMeta = () => {
+      const entry = configs[index];
+      if (!entry) {
+        if (nameInput) nameInput.value = "";
+        if (metaEl) metaEl.textContent = "Empty";
+        if (loadBtn) loadBtn.disabled = true;
+        if (clearBtn) clearBtn.disabled = true;
+        return;
+      }
+      if (nameInput) nameInput.value = entry.name || "";
+      const date = entry.updatedAt ? new Date(entry.updatedAt) : null;
+      const when = date && !Number.isNaN(date.getTime())
+        ? date.toLocaleString()
+        : "recently";
+      if (metaEl) metaEl.textContent = `Saved ${when}`;
+      if (loadBtn) loadBtn.disabled = false;
+      if (clearBtn) clearBtn.disabled = false;
+    };
+
+    if (configs[index] && nameInput) {
+      nameInput.value = configs[index].name || "";
+    }
+    updateMeta();
+
+    saveBtn?.addEventListener("click", () => {
+      const name = (nameInput?.value || `Slot ${index + 1}`).trim();
+      configs[index] = {
+        name,
+        css: cssField.value,
+        html: htmlField.value,
+        updatedAt: Date.now(),
+      };
+      if (persistConfigs()) {
+        updateMeta();
+        setStatus(`Saved current editors to Slot ${index + 1}.`);
+      } else {
+        updateMeta();
+      }
+    });
+
+    loadBtn?.addEventListener("click", () => {
+      const entry = configs[index];
+      if (!entry) {
+        setStatus(`Slot ${index + 1} is empty.`);
+        return;
+      }
+      cssField.value = entry.css;
+      htmlField.value = entry.html;
+      cssField.dispatchEvent(new Event("input", { bubbles: true }));
+      htmlField.dispatchEvent(new Event("input", { bubbles: true }));
+      setStatus(`Loaded Slot ${index + 1}${entry.name ? ` (${entry.name})` : ""}.`);
+    });
+
+    clearBtn?.addEventListener("click", () => {
+      if (!configs[index]) {
+        setStatus(`Slot ${index + 1} is already empty.`);
+        return;
+      }
+      configs[index] = null;
+      if (persistConfigs()) {
+        if (nameInput) nameInput.value = "";
+        updateMeta();
+        setStatus(`Cleared Slot ${index + 1}.`);
+      } else {
+        updateMeta();
+      }
+    });
   });
 }
 

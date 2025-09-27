@@ -9,6 +9,7 @@ A minimal profile subdomain project. Users can claim exactly one subdomain (e.g.
 - Profile editing UI (avatar upload, bio, links, custom CSS, optional custom HTML)
 - Optional custom CSS injected only on the user's page (5KB cap, scripts stripped)
 - Optional custom HTML block (5KB cap) with strict allow‑list sanitation (headings, paragraphs, inline formatting, lists, links, code, blockquote, img, simple structural tags). No script/style/iframe/event handlers or `javascript:` / `data:` URLs.
+- Saved-config sidebar with three local HTML/CSS presets (per-device, no server storage)
 - Optional custom favicon per subdomain (user‑uploaded 32x32 PNG/ICO <50KB)
 - Public profile documents stored in Firestore under `profiles/{subdomain}`
 - Internal user ownership doc at `users/{uid}` (not publicly readable)

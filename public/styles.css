@@ -128,6 +128,89 @@ a:hover {
   text-decoration: underline;
 }
 
+.customEditorLayout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.customEditorMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.customEditorSection {
+  display: flex;
+  flex-direction: column;
+}
+
+.savedConfigPanel {
+  flex-shrink: 0;
+  width: 260px;
+  border-radius: 16px;
+  border: 1px solid #ebebeb;
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  padding: 16px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.savedConfigList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.savedConfigPanelStatus {
+  color: #444;
+}
+
+.savedConfigSlot {
+  border: 1px solid #e4e4e4;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.savedConfigSlotHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.savedConfigSlotHeader .slotTitle {
+  font-weight: 600;
+}
+
+.savedConfigName {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid #d7d7d7;
+  font: inherit;
+}
+
+.savedConfigSlotButtons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.savedConfigSlotButtons .btn {
+  flex: 1 0 auto;
+  justify-content: center;
+}
+
+.savedConfigMeta {
+  margin: 8px 0 0;
+  min-height: 1.2em;
+}
+
 /* ---------------- Link cards (user links) --------------- */
 #links {
   display: grid;
@@ -195,6 +278,18 @@ a:hover {
   }
   #links a.card {
     padding: 14px 16px;
+  }
+}
+
+@media (max-width: 860px) {
+  .customEditorLayout {
+    flex-direction: column;
+  }
+  .savedConfigPanel {
+    width: 100%;
+  }
+  .savedConfigSlotButtons .btn {
+    flex: 1 1 calc(33% - 4px);
   }
 }
 
