@@ -18,7 +18,7 @@ A minimal profile subdomain project. Users can claim exactly one subdomain (e.g.
 
 ## HTML & CSS reference
 
-See `docs/html-css-reference.md` for a friendly walkthrough of the base HTML shell, runtime-generated markup, and every reusable selector in `public/styles.css`. It focuses on keeping custom HTML structure separate from styling so folks with light CSS knowledge can confidently customize their pages.
+See [docs/html-css-reference.md](docs/html-css-reference.md) for a friendly walkthrough of the base HTML shell, runtime-generated markup, and every reusable selector in `public/styles.css`. It focuses on keeping custom HTML structure separate from styling so folks with light CSS knowledge can confidently customize their pages.
 
 ## Data Model
 
