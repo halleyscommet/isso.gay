@@ -49,6 +49,10 @@ function getSubdomain(host) {
   return parts.slice(0, parts.length - apexParts.length).join(".");
 }
 const sub = getSubdomain(location.hostname);
+const siteFooter = document.querySelector(".siteFooter");
+if (siteFooter && sub) {
+  siteFooter.hidden = true; // show GitHub footer only on apex landing page
+}
 
 async function renderProfile(subdomain) {
   const el = document.getElementById("app");
