@@ -419,3 +419,18 @@ a:hover {
     padding: 1px 6px;
   }
 }
+
+/* -------- Site footer -------- */
+.siteFooter {
+  text-align: center;
+  margin: 48px auto 16px;
+  padding: 16px;
+  max-width: 720px;
+  font-size: 0.9rem;
+  color: #555;
+  border-top: 1px solid #e2e2e2;
+}
+.siteFooter a {
+  font-weight: 600;
+  text-decoration: underline;
+}
