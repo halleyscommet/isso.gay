@@ -54,8 +54,31 @@ if (siteFooter && sub) {
   siteFooter.hidden = true; // show GitHub footer only on apex landing page
 }
 
+function getRoute() {
+  const raw = location.pathname.replace(/\/+$/, "");
+  if (!raw) return "/";
+  return raw.toLowerCase();
+}
+
 async function renderProfile(subdomain) {
   const el = document.getElementById("app");
+  const route = getRoute();
+
+  if (!subdomain) {
+    if (route === "/directory") {
+      await renderDirectory();
+      return;
+    }
+    if (route !== "/") {
+      el.innerHTML = `
+        <div class="center">
+          <h1>Page not found</h1>
+          <p class="small">Try going back to the <a href="/">isso.gay</a> home page.</p>
+        </div>`;
+      return;
+    }
+  }
+
   if (!subdomain) {
     // Root (apex) landing page logic
     const user = auth.currentUser;
@@ -67,6 +90,10 @@ async function renderProfile(subdomain) {
           <div class="card" style="text-align:center">
             <button class="btn" id="g">Sign in with Google</button>
             <p class="small" style="margin-top:8px">Sign in to reserve your subdomain.</p>
+          </div>
+          <div class="card" style="text-align:center">
+            <a class="btn" href="/directory">Browse the directory</a>
+            <p class="small" style="margin-top:8px">See every profile that's live on isso.gay.</p>
           </div>
           <p class="small">Your profile will live at https://&lt;name&gt;.${APEX}</p>
         </div>`;
@@ -119,6 +146,9 @@ async function renderProfile(subdomain) {
             <a class="btn" href="https://${existing}.${APEX}" target="_blank">View</a>
             <button class="btn" id="deleteSub" style="margin-left:6px">Delete</button>
           </div>
+          <p class="small" style="text-align:center;margin:8px 0 16px">
+            <a href="/directory">Browse the directory</a>
+          </p>
           <form id="editForm" class="card" style="display:block">
             <h3 style="margin-top:0">Profile</h3>
             <div class="avatarRow" style="margin-bottom:12px;text-align:center">
@@ -289,6 +319,9 @@ async function renderProfile(subdomain) {
           </div>
           <p class="small" style="margin-top:8px">Allowed: letters, numbers, dashes. 1–63 chars. One per account.</p>
         </div>
+        <p class="small" style="margin-top:12px;text-align:center">
+          <a href="/directory">Check out the directory</a> for inspiration.
+        </p>
       </div>`;
     document
       .getElementById("signOutBtn")
@@ -439,6 +472,65 @@ async function renderProfile(subdomain) {
     a.innerHTML = `<strong>${l.title}</strong>${l.desc ? `<div>${l.desc}</div>` : ""}`;
     linksEl.appendChild(a);
   });
+}
+
+async function renderDirectory() {
+  const el = document.getElementById("app");
+  el.innerHTML = `
+    <div class="center">
+      <p>Loading directory…</p>
+    </div>`;
+
+  let profiles = [];
+  try {
+    const listFn = httpsCallable(functions, "listDirectory");
+    const res = await listFn({ limit: 300 });
+    profiles = Array.isArray(res.data?.profiles) ? res.data.profiles : [];
+  } catch (e) {
+    console.error("Failed to load directory", e);
+    el.innerHTML = `
+      <div class="center">
+        <h1>Directory unavailable</h1>
+        <p class="small">Please try again in a bit.</p>
+        <p style="margin-top:16px"><a class="btn" href="/">Back to isso.gay</a></p>
+      </div>`;
+    return;
+  }
+
+  if (!profiles.length) {
+    el.innerHTML = `
+      <div class="directoryPage">
+        <header class="directoryHeader">
+          <h1>isso.gay directory</h1>
+          <p>No profiles are published yet. <a href="/">Claim a subdomain</a> to go first.</p>
+        </header>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="directoryPage">
+      <header class="directoryHeader">
+        <h1>isso.gay directory</h1>
+        <p>Browse every public profile. Want one? <a href="/">Claim your subdomain.</a></p>
+        <p class="directoryCount">${profiles.length} profile${profiles.length === 1 ? "" : "s"}</p>
+      </header>
+      <ul class="directoryList">
+        ${profiles
+          .map((profile) => {
+            const displayHandle = profile.handle || profile.subdomain;
+            const subdomainLink = `${profile.subdomain}.${APEX}`;
+            return `<li class="directoryItem">
+              <a href="https://${escapeHTML(profile.subdomain)}.${APEX}" target="_blank" rel="noopener">
+                @${escapeHTML(displayHandle)}
+              </a>
+              <span class="directorySubdomain">${escapeHTML(subdomainLink)}</span>
+            </li>`;
+          })
+          .join("")}
+      </ul>
+    </div>
+  `;
 }
 
 function hookAuthUI() {

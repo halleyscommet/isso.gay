@@ -1,6 +1,6 @@
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
 initializeApp();
@@ -474,4 +474,86 @@ export const getAllBadges = onCall(
       throw new HttpsError("internal", "failed-to-get-all-badges");
     }
   }
+);
+
+// Public directory of profiles (sanitized subset). Lists the most recently updated profiles.
+export const listDirectory = onCall(
+  { region: "us-central1", cors: true },
+  async (req) => {
+    const limitRaw = Number(req.data?.limit);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.floor(limitRaw), 1), 500)
+      : 200;
+
+    let query = db
+      .collection("profiles")
+      .orderBy("updatedAt", "desc")
+      .limit(limit);
+
+    const startAfterMillis = Number(req.data?.startAfter);
+    if (Number.isFinite(startAfterMillis) && startAfterMillis > 0) {
+      query = query.startAfter(Timestamp.fromMillis(startAfterMillis));
+    }
+
+    const snap = await query.get();
+    const profiles = [];
+    for (const docSnap of snap.docs) {
+      const data = docSnap.data() || {};
+      const subdomain = docSnap.id;
+      const handle =
+        typeof data.handle === "string" && data.handle.trim()
+          ? data.handle.trim()
+          : subdomain;
+      const bio =
+        typeof data.bio === "string" ? data.bio.slice(0, 500).trim() : "";
+      const avatarPath =
+        typeof data.avatarPath === "string" ? data.avatarPath : "";
+      const faviconPath =
+        typeof data.faviconPath === "string" ? data.faviconPath : "";
+      const ogImagePath =
+        typeof data.ogImagePath === "string" ? data.ogImagePath : "";
+      const createdAt = data.createdAt?.toMillis?.() ?? null;
+      const updatedAt = data.updatedAt?.toMillis?.() ?? null;
+      const links =
+        Array.isArray(data.links) && data.links.length
+          ? data.links
+              .filter(
+                (link) =>
+                  link &&
+                  typeof link.title === "string" &&
+                  typeof link.url === "string",
+              )
+              .slice(0, 10)
+              .map((link) => {
+                const title = link.title.trim().slice(0, 80);
+                const url = link.url.trim();
+                return {
+                  title,
+                  url,
+                  desc:
+                    typeof link.desc === "string"
+                      ? link.desc.trim().slice(0, 160)
+                      : undefined,
+                };
+              })
+          : [];
+
+      profiles.push({
+        subdomain,
+        handle,
+        bio,
+        avatarPath,
+        faviconPath,
+        ogImagePath,
+        createdAt,
+        updatedAt,
+        links,
+      });
+    }
+
+    return {
+      profiles,
+      count: profiles.length,
+    };
+  },
 );
