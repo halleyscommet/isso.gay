@@ -1,23 +1,66 @@
+:root {
+  /* Dark theme (default) */
+  color-scheme: dark;
+  --bg: #0b0b0f;
+  --text: #e9e9ef;
+  --muted: #a6a6b2;
+  --card: #141419;
+  --elev: #101018;
+  --border: #252530;
+  --border-soft: #2c2c39;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.35);
+  --btn-bg: #1a1a22;
+  --btn-border: #333346;
+  --btn-hover-bg: #20202a;
+  --btn-hover-border: #3b3b50;
+  --focus: #7aa2ff;
+  --link-desc: #b7b7c5;
+  --link-hover-bg: #1b1b24;
+}
+
+[data-theme="light"] {
+  /* Light theme overrides */
+  color-scheme: light;
+  --bg: #fafafa;
+  --text: #111;
+  --muted: #555;
+  --card: #ffffff;
+  --elev: #ffffff;
+  --border: #e2e2e2;
+  --border-soft: #ebebeb;
+  --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --btn-bg: #ffffff;
+  --btn-border: #cccccc;
+  --btn-hover-bg: #f5f5f5;
+  --btn-hover-border: #bbbbbb;
+  --focus: #111;
+  --link-desc: #555;
+  --link-hover-bg: #f9f9f9;
+}
+
 body {
   font-family: system-ui, sans-serif;
   margin: 0;
   padding: 24px;
-  background: #fafafa;
-  color: #111;
+  background: var(--bg);
+  color: var(--text);
 }
 .card {
   border-radius: 16px;
   padding: 16px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow);
   margin: 12px 0;
-  background: #fff;
+  background: var(--card);
+  border: 1px solid var(--border);
 }
 .btn {
   padding: 8px 16px;
   border-radius: 9999px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--btn-border);
   cursor: pointer;
-  background: #fff;
+  background: var(--btn-bg);
   font-weight: 600;
   line-height: 1.2;
   display: inline-flex;
@@ -35,14 +78,14 @@ body {
     border-color 0.2s;
 }
 .btn:hover:not(:disabled) {
-  background: #f5f5f5;
-  border-color: #bbb;
+  background: var(--btn-hover-bg);
+  border-color: var(--btn-hover-border);
 }
 .btn:active:not(:disabled) {
   transform: translateY(1px);
 }
 .btn:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 .btn:disabled {
@@ -79,23 +122,27 @@ body {
   margin: 0 auto;
 }
 .small {
-  opacity: 0.7;
+  opacity: 0.8;
   font-size: 0.9rem;
 }
 input[type="text"] {
   padding: 10px;
   border-radius: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
+  background: var(--elev);
+  color: var(--text);
 }
 a textarea,
 textarea {
   width: 100%;
   padding: 10px;
   border-radius: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   font: inherit;
   resize: vertical;
   box-sizing: border-box;
+  background: var(--elev);
+  color: var(--text);
 }
 .linkRow {
   display: grid;
@@ -115,7 +162,7 @@ textarea {
   padding: 6px 10px;
 }
 .linkRow button {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
 }
 .avatarRow input[type="file"] {
   font-size: 0.8rem;
@@ -150,10 +197,10 @@ a:hover {
   flex-shrink: 0;
   width: 260px;
   border-radius: 16px;
-  border: 1px solid #ebebeb;
-  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+  border: 1px solid var(--border);
+  background: var(--card);
   padding: 16px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 1px 4px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--shadow-soft);
 }
 
 .savedConfigList {
@@ -163,15 +210,15 @@ a:hover {
 }
 
 .savedConfigPanelStatus {
-  color: #444;
+  color: var(--muted);
 }
 
 .savedConfigSlot {
-  border: 1px solid #e4e4e4;
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  background: var(--elev);
+  box-shadow: var(--shadow-soft);
 }
 
 .savedConfigSlotHeader {
@@ -191,8 +238,10 @@ a:hover {
   min-width: 0;
   padding: 6px 8px;
   border-radius: 10px;
-  border: 1px solid #d7d7d7;
+  border: 1px solid var(--border);
   font: inherit;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .savedConfigSlotButtons {
@@ -224,7 +273,7 @@ a:hover {
   align-items: flex-start;
   gap: 4px;
   padding: 16px 18px;
-  border: 1px solid #e2e2e2;
+  border: 1px solid var(--border);
   border-radius: 18px;
   transition:
     background 0.25s,
@@ -232,7 +281,7 @@ a:hover {
     transform 0.18s,
     border-color 0.25s;
   text-decoration: none;
-  background: #fff;
+  background: var(--card);
   overflow-wrap: anywhere;
 }
 #links a.card strong {
@@ -247,22 +296,22 @@ a:hover {
 #links a.card div {
   font-size: 0.8rem;
   line-height: 1.3;
-  color: #555;
+  color: var(--link-desc);
   max-width: 100%;
 }
 #links a.card:hover {
   text-decoration: none;
-  background: #f9f9f9;
-  border-color: #d0d0d0;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  background: var(--link-hover-bg);
+  border-color: var(--btn-hover-border);
+  box-shadow: var(--shadow);
   transform: translateY(-2px);
 }
 #links a.card:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-soft);
 }
 #links a.card:focus-visible {
-  outline: 2px solid #111;
+  outline: 2px solid var(--focus);
   outline-offset: 3px;
 }
 
@@ -306,12 +355,12 @@ a:hover {
   z-index: 5000;
 }
 .cropModal {
-  background: #fff;
+  background: var(--card);
   border-radius: 20px;
   padding: 20px 22px 22px;
   width: 100%;
   max-width: 420px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow);
   animation: popIn 0.25s ease;
 }
 @keyframes popIn {
@@ -459,9 +508,9 @@ a:hover {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 12px;
-  border: 1px solid #ececec;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow-soft);
   color: inherit;
   text-decoration: none;
 }
@@ -476,8 +525,8 @@ a:hover {
   word-break: break-word;
 }
 .directoryItem:hover {
-  border-color: #dcdcdc;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--btn-hover-border);
+  box-shadow: var(--shadow);
 }
 
 /* -------- Site footer -------- */
@@ -487,10 +536,18 @@ a:hover {
   padding: 16px;
   max-width: 720px;
   font-size: 0.9rem;
-  color: #555;
-  border-top: 1px solid #e2e2e2;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
 }
 .siteFooter a {
   font-weight: 600;
   text-decoration: underline;
+}
+
+/* ---- Theme toggle button ---- */
+.themeToggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 6000;
 }

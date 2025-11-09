@@ -32,6 +32,46 @@ const firebaseConfig = {
   appId: "1:800933783311:web:0e546191c66879ff18c07a",
 };
 
+// ---- Theme handling (default dark, toggle to light) ----
+const THEME_KEY = "theme";
+function applyTheme(theme) {
+  if (theme === "light") {
+    document.documentElement.setAttribute("data-theme", "light");
+  } else {
+    document.documentElement.removeAttribute("data-theme"); // dark is default
+  }
+}
+function initTheme() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch {}
+  const theme = saved === "light" ? "light" : "dark"; // default to dark
+  applyTheme(theme);
+}
+function setupThemeToggle() {
+  const btn = document.getElementById("themeToggle");
+  if (!btn) return;
+  const updateLabel = () => {
+    const isLight = document.documentElement.getAttribute("data-theme") === "light";
+    btn.setAttribute("aria-pressed", isLight ? "true" : "false");
+    btn.textContent = isLight ? "Light" : "Dark";
+    btn.title = isLight ? "Switch to dark mode" : "Switch to light mode";
+  };
+  btn.addEventListener("click", () => {
+    const isLight = document.documentElement.getAttribute("data-theme") === "light";
+    const next = isLight ? "dark" : "light";
+    applyTheme(next);
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {}
+    updateLabel();
+  });
+  updateLabel();
+}
+initTheme();
+window.addEventListener("DOMContentLoaded", setupThemeToggle);
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
